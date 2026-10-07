@@ -15,6 +15,27 @@
 
 > **Điều kiện bắt buộc:** Node.js **≥ 24.15.0** (hoặc ≥ 22.22.3). Kiểm tra bằng `node -v`. Xem [mục 2](#2-yêu-cầu-môi-trường).
 
+### 🐳 Cách nhanh nhất: Docker Compose (cả 3 thành phần)
+
+Chỉ cần cài [Docker Desktop](https://www.docker.com/products/docker-desktop/). Từ thư mục gốc của repo:
+
+```bash
+docker compose up --build        # lần đầu hoặc khi code thay đổi
+docker compose up -d             # chạy nền những lần sau
+docker compose logs -f backend   # xem log backend
+docker compose down              # dừng (thêm -v để xóa luôn dữ liệu DB)
+```
+
+| Service | Địa chỉ | Ghi chú |
+| ------- | ------- | ------- |
+| `frontend` | http://localhost:3000 | Next.js build production |
+| `backend` | http://localhost:3001 | NestJS, đọc `DATABASE_URL`, `JWT_SECRET` từ compose |
+| `db` | `localhost:5432` | PostgreSQL 16, user/pass/db mặc định `maycha` / `maycha_password` / `maycha_db` |
+
+Muốn đổi mật khẩu DB, `JWT_SECRET`…: `cp .env.example .env` ở **thư mục gốc** rồi sửa. Xem chi tiết ở [mục 10](#10-docker-compose--bàn-giao).
+
+### 💻 Chạy thủ công (dev, tự reload)
+
 Mở **2 terminal**, chạy song song, **không tắt** trong lúc dùng web. Mọi lệnh đều chạy từ **thư mục gốc của repo**.
 
 ### 🪟 Windows – PowerShell (terminal mặc định của VS Code)
@@ -60,7 +81,7 @@ npm run dev
 
 Dừng server: `Ctrl + C` trong terminal tương ứng.
 
-> ⚠️ **Backend bắt buộc chạy với `PORT=3001`.** Hiện backend **chưa đọc file `.env`**, nên nếu thiếu biến này nó sẽ mặc định chiếm cổng **3000** và tranh cổng với frontend.
+> ℹ️ Backend tự đọc `backend/.env` khi khởi động (dùng `process.loadEnvFile()` có sẵn trong Node, không cần thư viện). Nếu chưa có `.env`, backend mặc định chạy cổng **3001**. Các API cần đăng nhập (vd. `/orders/me`) yêu cầu `JWT_SECRET` – đã có sẵn trong `.env.example`.
 
 ---
 
@@ -75,6 +96,8 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 7. [Danh sách lệnh npm](#7-danh-sách-lệnh-npm)
 8. [Lỗi thường gặp](#8-lỗi-thường-gặp)
 9. [Quy tắc làm việc nhóm](#9-quy-tắc-làm-việc-nhóm)
+10. [Docker Compose & bàn giao](#10-docker-compose--bàn-giao)
+11. [API đơn hàng – Lịch sử & Xác nhận (Task 9)](#11-api-đơn-hàng--lịch-sử--xác-nhận-task-9)
 
 ---
 
@@ -83,10 +106,11 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 | Hạng mục | Trạng thái |
 | -------- | ---------- |
 | Frontend (Next.js) | ✅ Khởi tạo xong, đang là trang mẫu mặc định |
-| Backend (NestJS) | ✅ Khởi tạo xong, có 1 route `GET /` trả về `Hello World!` |
-| Đọc file `.env` ở backend | ❌ Chưa có (chưa cài `@nestjs/config`) |
-| PostgreSQL / Prisma | ❌ Chưa tích hợp, **chưa cần cài database** |
-| Docker Compose | ❌ Chưa có `docker-compose.yml` |
+| Backend (NestJS) | ✅ `GET /`, `GET /products`, `GET /products/:id` |
+| Backend – lịch sử & xác nhận đơn (Task 9) | ✅ `GET /orders/me`, `GET /orders/:id` (cần JWT) – dữ liệu đơn đang lưu trong bộ nhớ, chờ Prisma |
+| Đọc file `.env` ở backend | ✅ `process.loadEnvFile()` trong `main.ts` |
+| PostgreSQL / Prisma | ⚠️ Đã có container PostgreSQL trong Docker Compose; **chưa tích hợp Prisma** |
+| Docker Compose | ✅ `docker-compose.yml` chạy `db` + `backend` + `frontend` |
 | Frontend gọi API backend | ❌ Chưa kết nối |
 
 > Khi một hạng mục được hoàn thành, người làm task đó **phải cập nhật bảng này và các mục liên quan** trong cùng Pull Request.
@@ -136,11 +160,14 @@ Cài / nâng cấp Node.js:
 Maycha/
 ├── backend/                 # API server – NestJS (TypeScript)
 │   ├── src/
-│   │   ├── main.ts          # Điểm khởi động, đọc biến PORT (mặc định 3000)
+│   │   ├── main.ts          # Điểm khởi động, nạp .env, CORS, PORT (mặc định 3001)
 │   │   ├── app.module.ts    # Module gốc
 │   │   ├── app.controller.ts# Route GET /
-│   │   └── app.service.ts
+│   │   ├── products/        # GET /products, GET /products/:id
+│   │   ├── orders/          # GET /orders/me, GET /orders/:id (Task 9)
+│   │   └── common/auth/     # JwtAuthGuard, @CurrentUser, ký/xác thực JWT HS256
 │   ├── test/                # Test end-to-end
+│   ├── Dockerfile
 │   ├── .env.example         # Mẫu biến môi trường (được commit)
 │   └── package.json
 ├── frontend/                # Giao diện – Next.js (App Router) + Tailwind CSS
@@ -148,7 +175,10 @@ Maycha/
 │   │   ├── layout.tsx       # Layout chung
 │   │   └── page.tsx         # Trang chủ "/"
 │   ├── public/              # Ảnh, icon tĩnh
+│   ├── Dockerfile
 │   └── package.json
+├── docker-compose.yml       # db + backend + frontend
+├── .env.example             # Biến cho docker-compose (tùy chọn)
 └── README.md
 ```
 
@@ -224,9 +254,10 @@ File: `backend/.env` (tạo từ `backend/.env.example`).
 
 | Biến | Giá trị mẫu | Đang được dùng? | Ý nghĩa |
 | ---- | ----------- | --------------- | ------- |
-| `PORT` | `3001` | ⚠️ Chỉ khi đặt trực tiếp trong lệnh chạy | Cổng backend. `main.ts` đọc `process.env.PORT`, mặc định `3000` |
-| `DATABASE_URL` | `postgresql://user:password@localhost:5432/maycha_db?schema=public` | ❌ Chưa | Chuỗi kết nối PostgreSQL cho Prisma (Sprint sau) |
-| `JWT_SECRET` | `super_secret_key_123` | ❌ Chưa | Khóa ký JWT (Sprint 2) |
+| `PORT` | `3001` | ✅ | Cổng backend, mặc định `3001` |
+| `DATABASE_URL` | `postgresql://maycha:maycha_password@localhost:5432/maycha_db?schema=public` | ❌ Chưa | Chuỗi kết nối PostgreSQL cho Prisma. Khớp với service `db` trong Docker Compose |
+| `JWT_SECRET` | `super_secret_key_123` | ✅ | Khóa ký/xác thực JWT (HS256). `POST /auth/login` (Task 7) **phải ký bằng cùng khóa này** |
+| `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | ✅ | Danh sách origin frontend được gọi API, cách nhau bằng dấu phẩy |
 
 Quy tắc:
 - **Không commit file `.env`** (đã có trong `.gitignore`). Chỉ commit `.env.example`.
@@ -243,6 +274,7 @@ Trước khi báo "chạy được", tự kiểm tra đủ các mục:
 - [ ] `npm install` ở `backend/` kết thúc bằng `added …` hoặc `up to date …`
 - [ ] `npm install` ở `frontend/` kết thúc bằng `added …` hoặc `up to date …`
 - [ ] http://localhost:3001 hiển thị `Hello World!`
+- [ ] http://localhost:3001/orders/me trả `401` khi chưa đăng nhập
 - [ ] http://localhost:3000 hiển thị trang web
 - [ ] `git status` **không** hiện `.env` hay `node_modules/`
 
@@ -354,3 +386,78 @@ npm install -D <tên-gói>          # thư viện chỉ dùng khi phát triển
 ```
 
 Commit **cả** `package.json` **và** `package-lock.json` trong cùng một commit, và ghi rõ trong PR để cả nhóm biết cần `npm install` lại.
+
+---
+
+## 10. Docker Compose & bàn giao
+
+File `docker-compose.yml` ở thư mục gốc dựng 3 service:
+
+| Service | Image / build | Cổng | Phụ thuộc |
+| ------- | ------------- | ---- | --------- |
+| `db` | `postgres:16-alpine`, volume `db_data` | `5432` | – (có healthcheck `pg_isready`) |
+| `backend` | `backend/Dockerfile` (multi-stage, chạy `node dist/main` bằng user `node`) | `3001` | chờ `db` healthy |
+| `frontend` | `frontend/Dockerfile` (`next build` → `next start`) | `3000` | `backend` |
+
+Biến cấu hình (đặt trong `.env` ở thư mục gốc, xem `.env.example`):
+
+| Biến | Mặc định | Dùng cho |
+| ---- | -------- | -------- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `maycha` / `maycha_password` / `maycha_db` | `db`, và ghép thành `DATABASE_URL` cho `backend` |
+| `JWT_SECRET` | `change_me_in_production` | `backend` |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | `frontend` – nhúng lúc **build**, đổi giá trị thì phải `docker compose up --build` |
+
+> Frontend gọi API bằng `process.env.NEXT_PUBLIC_API_URL` (trình duyệt gọi thẳng `localhost:3001`, nên không dùng tên service `backend`).
+
+### Kịch bản demo end-to-end (Sprint Review)
+
+1. `docker compose up --build`, mở http://localhost:3000.
+2. Menu → chọn sản phẩm (size, topping) → thêm vào giỏ.
+3. Đăng nhập → thanh toán bằng Ví / Thẻ (`POST /payments`).
+4. Màn hình xác nhận gọi `GET /orders/:id` → hiển thị **mã đơn** và **trạng thái** (`PAID` / `PAYMENT_FAILED`).
+5. Trang lịch sử gọi `GET /orders/me` → thấy đơn vừa đặt ở đầu danh sách.
+
+---
+
+## 11. API đơn hàng – Lịch sử & Xác nhận (Task 9)
+
+Cả hai endpoint đều cần header `Authorization: Bearer <JWT>`. Token ký **HS256** bằng `JWT_SECRET`, payload tối thiểu `{ "sub": <userId>, "email": "..." }` (đúng dạng mà `@nestjs/jwt` phát ra ở Task 7).
+
+| Endpoint | Mô tả | Mã lỗi |
+| -------- | ----- | ------ |
+| `GET /orders/me` | Lịch sử đơn của user đang đăng nhập, **mới nhất trước** | `401` thiếu/sai token |
+| `GET /orders/:id` | Chi tiết một đơn cho màn hình xác nhận | `400` id không phải số, `401`, `404` không tồn tại **hoặc không phải đơn của mình** |
+
+Ví dụ phản hồi `GET /orders/1042`:
+
+```json
+{
+  "id": 1042,
+  "code": "#1042",
+  "status": "PAID",
+  "total": 123000,
+  "itemCount": 3,
+  "createdAt": "2026-10-07T10:00:00.000Z",
+  "updatedAt": "2026-10-07T10:00:00.000Z",
+  "items": [
+    { "id": 1, "productId": "4", "productName": "Cappuccino", "size": "M", "toppings": [], "qty": 1, "unitPrice": 45000, "lineTotal": 45000 },
+    { "id": 2, "productId": "2", "productName": "Trà Đào Cam Sả", "size": "L", "toppings": [], "qty": 2, "unitPrice": 39000, "lineTotal": 78000 }
+  ]
+}
+```
+
+`status` là một trong: `PENDING`, `PAID`, `PAYMENT_FAILED`, `PREPARING`, `READY`, `COMPLETED`, `CANCELLED`. `GET /orders/me` trả một mảng các object cùng dạng.
+
+### Ghi chú tích hợp cho các task khác
+
+- **Task 6 (`POST /orders`)** / **Task 8 (`POST /payments`)**: import `OrdersModule`, inject `OrdersRepository` rồi dùng `nextId()`, `nextItemIdValue()` và `save(order)` để tạo / cập nhật đơn – đơn sẽ tự xuất hiện ở `/orders/me`.
+- **Task 7 (Auth)**: ký JWT với `sub = user.id` bằng `JWT_SECRET`. Có thể dùng `JwtAuthGuard` và `@CurrentUser()` trong `src/common/auth/` để bảo vệ `POST /orders`.
+- **Khi tích hợp Prisma**: chỉ cần thay thân các hàm trong `src/orders/orders.repository.ts`; service, controller và test e2e giữ nguyên.
+
+### Test
+
+```bash
+cd backend
+npm test                                   # unit test: orders.service, jwt-auth.guard
+npm run test:e2e -- orders.e2e-spec.ts     # e2e: 401 / 200 / 404 / 400 cho /orders/me và /orders/:id
+```
