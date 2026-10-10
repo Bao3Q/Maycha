@@ -1,5 +1,10 @@
+import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+
+// Đọc backend/.env khi chạy local (JWT_SECRET cần cho đăng nhập). Biến môi
+// trường đã có sẵn (vd. từ docker-compose) không bị ghi đè.
+if (existsSync('.env')) process.loadEnvFile();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
