@@ -1,11 +1,26 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+// Nạp biến môi trường từ backend/.env nếu có (Node >= 20.12, không cần dotenv).
+// Biến đặt sẵn trong môi trường (vd. docker-compose) không bị ghi đè.
+try {
+  process.loadEnvFile();
+} catch {
+  // Không có file .env → dùng biến môi trường hệ thống.
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const corsOrigins = (
+    process.env.CORS_ORIGIN ?? 'http://localhost:3000,http://127.0.0.1:3000'
+  )
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });

@@ -120,4 +120,41 @@ describe('Orders – lịch sử & xác nhận đơn (e2e)', () => {
       .set('Authorization', `Bearer ${tokenU1()}`)
       .expect(400);
   });
+
+  describe('POST /dev/demo-session', () => {
+    afterEach(() => {
+      delete process.env.ENABLE_DEMO_SEED;
+    });
+
+    it('404 khi chưa bật ENABLE_DEMO_SEED', () => {
+      delete process.env.ENABLE_DEMO_SEED;
+      return request(app.getHttpServer()).post('/dev/demo-session').expect(404);
+    });
+
+    it('token demo xem được lịch sử và màn xác nhận của chính nó', async () => {
+      process.env.ENABLE_DEMO_SEED = 'true';
+      const session = await request(app.getHttpServer())
+        .post('/dev/demo-session')
+        .expect(200);
+      const token = session.body.accessToken as string;
+
+      const mine = await request(app.getHttpServer())
+        .get('/orders/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(mine.body).toHaveLength(3);
+      expect(mine.body[0].status).toBe('PAID');
+
+      await request(app.getHttpServer())
+        .get(`/orders/${mine.body[0].id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      // Không xem được đơn #1042 của u1
+      await request(app.getHttpServer())
+        .get('/orders/1042')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+  });
 });
