@@ -106,13 +106,15 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 
 | Hạng mục | Trạng thái |
 | -------- | ---------- |
-| Frontend (Next.js) | ✅ Khởi tạo xong, đang là trang mẫu mặc định |
+| Frontend (Next.js) | ✅ Khởi tạo xong; trang chủ vẫn là trang mẫu mặc định |
+| Frontend – xác nhận & lịch sử đơn (Task 9) | ✅ `/orders/[id]` (màn hình xác nhận), `/orders` (lịch sử) – gọi API thật kèm JWT |
 | Backend (NestJS) | ✅ `GET /`, `GET /products`, `GET /products/:id` |
 | Backend – lịch sử & xác nhận đơn (Task 9) | ✅ `GET /orders/me`, `GET /orders/:id` (cần JWT) – dữ liệu đơn đang lưu trong bộ nhớ, chờ Prisma |
 | Đọc file `.env` ở backend | ✅ `process.loadEnvFile()` trong `main.ts` |
 | PostgreSQL / Prisma | ⚠️ Đã có container PostgreSQL trong Docker Compose; **chưa tích hợp Prisma** |
 | Docker Compose | ✅ `docker-compose.yml` chạy `db` + `backend` + `frontend` |
-| Frontend gọi API backend | ❌ Chưa kết nối |
+| Frontend gọi API backend | ✅ Trang `/orders`, `/orders/[id]` (qua `frontend/lib/api.ts`); các trang khác chưa kết nối |
+| Dữ liệu demo (khi chưa ghép Task 6/7/8) | ✅ `POST /dev/demo-session`, bật bằng `ENABLE_DEMO_SEED=true` |
 
 > Khi một hạng mục được hoàn thành, người làm task đó **phải cập nhật bảng này và các mục liên quan** trong cùng Pull Request.
 
@@ -166,6 +168,7 @@ Maycha/
 │   │   ├── app.controller.ts# Route GET /
 │   │   ├── products/        # GET /products, GET /products/:id
 │   │   ├── orders/          # GET /orders/me, GET /orders/:id (Task 9)
+│   │   ├── dev/             # POST /dev/demo-session – chỉ để demo (ENABLE_DEMO_SEED)
 │   │   └── common/auth/     # JwtAuthGuard, @CurrentUser, ký/xác thực JWT HS256
 │   ├── test/                # Test end-to-end
 │   ├── Dockerfile
@@ -174,7 +177,14 @@ Maycha/
 ├── frontend/                # Giao diện – Next.js (App Router) + Tailwind CSS
 │   ├── app/
 │   │   ├── layout.tsx       # Layout chung
-│   │   └── page.tsx         # Trang chủ "/"
+│   │   ├── page.tsx         # Trang chủ "/"
+│   │   └── orders/
+│   │       ├── layout.tsx   # Khung chung trang Đơn hàng
+│   │       ├── page.tsx     # /orders – Lịch sử đơn (Task 9)
+│   │       └── [id]/page.tsx# /orders/:id – Màn hình xác nhận (Task 9)
+│   ├── lib/                 # api.ts (gọi backend), auth.ts (lưu JWT), format.ts
+│   ├── components/          # StatusBadge, thẻ loading / lỗi / cần đăng nhập
+│   ├── .env.example
 │   ├── public/              # Ảnh, icon tĩnh
 │   ├── Dockerfile
 │   └── package.json
@@ -259,6 +269,16 @@ File: `backend/.env` (tạo từ `backend/.env.example`).
 | `DATABASE_URL` | `postgresql://maycha:maycha_password@localhost:5432/maycha_db?schema=public` | ❌ Chưa | Chuỗi kết nối PostgreSQL cho Prisma. Khớp với service `db` trong Docker Compose |
 | `JWT_SECRET` | `super_secret_key_123` | ✅ | Khóa ký/xác thực JWT (HS256). `POST /auth/login` (Task 7) **phải ký bằng cùng khóa này** |
 | `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | ✅ | Danh sách origin frontend được gọi API, cách nhau bằng dấu phẩy |
+| `ENABLE_DEMO_SEED` | `true` | ✅ | Bật `POST /dev/demo-session` (token + đơn mẫu cho tài khoản demo). **Đặt `false` khi Task 6/7/8 đã ghép xong** |
+
+File: `frontend/.env.local` (tạo từ `frontend/.env.example`, chỉ cần khi chạy `npm run dev`):
+
+| Biến | Giá trị mẫu | Ý nghĩa |
+| ---- | ----------- | ------- |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Địa chỉ backend mà trình duyệt gọi tới |
+| `NEXT_PUBLIC_ENABLE_DEMO` | `true` | Hiện nút **"Dùng tài khoản demo"** ở trang Đơn hàng khi chưa đăng nhập |
+
+> Biến `NEXT_PUBLIC_*` được nhúng vào code lúc build/khởi động `next dev` – sửa xong phải chạy lại.
 
 Quy tắc:
 - **Không commit file `.env`** (đã có trong `.gitignore`). Chỉ commit `.env.example`.
@@ -277,6 +297,7 @@ Trước khi báo "chạy được", tự kiểm tra đủ các mục:
 - [ ] http://localhost:3001 hiển thị `Hello World!`
 - [ ] http://localhost:3001/orders/me trả `401` khi chưa đăng nhập
 - [ ] http://localhost:3000 hiển thị trang web
+- [ ] http://localhost:3000/orders hiển thị trang Lịch sử đơn (chưa đăng nhập → thẻ "Cần đăng nhập")
 - [ ] `git status` **không** hiện `.env` hay `node_modules/`
 
 ---
@@ -407,16 +428,35 @@ Biến cấu hình (đặt trong `.env` ở thư mục gốc, xem `.env.example`
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `maycha` / `maycha_password` / `maycha_db` | `db`, và ghép thành `DATABASE_URL` cho `backend` |
 | `JWT_SECRET` | `change_me_in_production` | `backend` |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | `frontend` – nhúng lúc **build**, đổi giá trị thì phải `docker compose up --build` |
+| `ENABLE_DEMO_SEED` | `true` | `backend` (bật `POST /dev/demo-session`) và `frontend` (nút demo, nhúng lúc build) |
 
 > Frontend gọi API bằng `process.env.NEXT_PUBLIC_API_URL` (trình duyệt gọi thẳng `localhost:3001`, nên không dùng tên service `backend`).
 
 ### Kịch bản demo end-to-end (Sprint Review)
 
+**A. Khi Task 6/7/8 đã ghép (luồng thật):**
+
 1. `docker compose up --build`, mở http://localhost:3000.
 2. Menu → chọn sản phẩm (size, topping) → thêm vào giỏ.
 3. Đăng nhập → thanh toán bằng Ví / Thẻ (`POST /payments`).
-4. Màn hình xác nhận gọi `GET /orders/:id` → hiển thị **mã đơn** và **trạng thái** (`PAID` / `PAYMENT_FAILED`).
-5. Trang lịch sử gọi `GET /orders/me` → thấy đơn vừa đặt ở đầu danh sách.
+4. Frontend chuyển tới **`/orders/<id>`** → màn hình xác nhận gọi `GET /orders/:id`, hiển thị **mã đơn** (`#1042`) và **trạng thái** (`PAID` xanh / `PAYMENT_FAILED` đỏ / `PENDING` tự cập nhật mỗi 3 giây).
+5. Bấm **"Xem lịch sử đơn"** → `/orders` gọi `GET /orders/me` → đơn vừa đặt ở đầu danh sách.
+
+**B. Khi chưa ghép (demo riêng Task 9, `ENABLE_DEMO_SEED=true`):**
+
+1. `docker compose up --build`, mở http://localhost:3000/orders → thấy thẻ **"Cần đăng nhập"** (chứng minh API trả `401` khi thiếu token).
+2. Bấm **"Dùng tài khoản demo"** → backend cấp JWT cho `demo-user` và tạo 3 đơn mẫu (`PAID`, `PAYMENT_FAILED`, `COMPLETED`).
+3. Trang hiển thị lịch sử 3 đơn, mới nhất trước.
+4. Bấm đơn `PAID` → màn hình xác nhận "Đặt hàng thành công!" với mã đơn, trạng thái, danh sách món, tổng tiền. Quay lại, bấm đơn `PAYMENT_FAILED` → "Thanh toán thất bại".
+5. Mở http://localhost:3000/orders/1 → "Không tìm thấy đơn hàng" (đơn không tồn tại / không phải của mình → `404`).
+6. `docker compose restart backend` → đơn mất (đang lưu bộ nhớ – giới hạn hiện tại, sẽ hết khi tích hợp Prisma).
+
+Gọi bằng terminal (macOS / Linux / Git Bash):
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3001/dev/demo-session | node -pe "JSON.parse(require('fs').readFileSync(0)).accessToken")
+curl -s http://localhost:3001/orders/me -H "Authorization: Bearer $TOKEN"
+```
 
 ---
 
@@ -449,8 +489,25 @@ Ví dụ phản hồi `GET /orders/1042`:
 
 `status` là một trong: `PENDING`, `PAID`, `PAYMENT_FAILED`, `PREPARING`, `READY`, `COMPLETED`, `CANCELLED`. `GET /orders/me` trả một mảng các object cùng dạng.
 
+### Giao diện (frontend)
+
+| Trang | File | Gọi API | Hiển thị |
+| ----- | ---- | ------- | -------- |
+| `/orders/[id]` – Xác nhận | `frontend/app/orders/[id]/page.tsx` | `GET /orders/:id` | Tiêu đề theo trạng thái, **mã đơn**, **trạng thái**, món (size, topping, SL), tổng tiền, giờ đặt. Đơn `PENDING` tự hỏi lại mỗi 3 giây (tối đa 1 phút) |
+| `/orders` – Lịch sử | `frontend/app/orders/page.tsx` | `GET /orders/me` | Danh sách đơn mới nhất trước, bấm để mở chi tiết; trạng thái rỗng có nút "Xem menu" |
+
+Cả hai trang xử lý: đang tải, chưa đăng nhập / token hết hạn (`401` → xóa token, hiện thẻ đăng nhập), không tìm thấy (`404`/`400`), mất kết nối backend (nút "Thử lại").
+
+### Endpoint demo (chỉ khi `ENABLE_DEMO_SEED=true`)
+
+| Endpoint | Mô tả |
+| -------- | ----- |
+| `POST /dev/demo-session` | Trả `{ accessToken, user, orders }` cho tài khoản cố định `demo-user` (token hạn 8 giờ). Lần đầu tạo 3 đơn mẫu; gọi lại không tạo trùng. Không nhận `userId` từ client nên không giả mạo được user thật. Tắt cờ → `404` |
+
 ### Ghi chú tích hợp cho các task khác
 
+- **Task 7 (Đăng nhập – frontend)**: sau khi `POST /auth/login` thành công, gọi `setToken(accessToken)` trong `frontend/lib/auth.ts` (lưu `localStorage["accessToken"]`). Trang đăng nhập nên ở `/login` (nút "Đăng nhập" trỏ tới đây).
+- **Task 8 (Thanh toán – frontend)**: sau khi `POST /payments` trả kết quả (thành công **hoặc** thất bại), `router.push('/orders/' + orderId)` để vào màn hình xác nhận.
 - **Task 6 (`POST /orders`)** / **Task 8 (`POST /payments`)**: import `OrdersModule`, inject `OrdersRepository` rồi dùng `nextId()`, `nextItemIdValue()` và `save(order)` để tạo / cập nhật đơn – đơn sẽ tự xuất hiện ở `/orders/me`.
 - **Task 7 (Auth)**: đã xong – xem [mục 12](#12-api-đăng-ký--đăng-nhập--jwt-task-7). Route đặt đơn chỉ cần `@UseGuards(JwtAuthGuard)` và `@CurrentUser()` (`src/common/auth/`); `OrdersController` đã gắn guard ở mức class nên `POST /orders` thêm vào sẽ tự được bảo vệ.
 - **Khi tích hợp Prisma**: chỉ cần thay thân các hàm trong `src/orders/orders.repository.ts`; service, controller và test e2e giữ nguyên.
@@ -459,8 +516,8 @@ Ví dụ phản hồi `GET /orders/1042`:
 
 ```bash
 cd backend
-npm test                                   # unit test: orders.service, jwt-auth.guard
-npm run test:e2e -- orders.e2e-spec.ts     # e2e: 401 / 200 / 404 / 400 cho /orders/me và /orders/:id
+npm test                                   # unit test: orders.service, jwt-auth.guard, demo.controller
+npm run test:e2e -- orders.e2e-spec.ts     # e2e: 401 / 200 / 404 / 400 cho /orders/me, /orders/:id và luồng demo-session
 ```
 
 ---

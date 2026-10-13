@@ -1,20 +1,32 @@
 import {
+  Body,
   Controller,
   Get,
   HttpStatus,
   Param,
   ParseIntPipe,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthUser } from '../common/auth/auth-user.interface';
+import { CreateOrderDto } from './dto/create-order.dto'; // Import DTO tạo đơn hàng
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
+
+  /** Task 6: Tạo đơn hàng mới từ giỏ hàng (POST /orders) */
+  @Post()
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() createOrderDto: CreateOrderDto,
+  ) {
+    return this.ordersService.createOrder(user.id, createOrderDto);
+  }
 
   /** Lịch sử đơn hàng của user đang đăng nhập. Phải khai báo trước ':id'. */
   @Get('me')
