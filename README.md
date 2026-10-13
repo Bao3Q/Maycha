@@ -98,6 +98,7 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 9. [Quy tắc làm việc nhóm](#9-quy-tắc-làm-việc-nhóm)
 10. [Docker Compose & bàn giao](#10-docker-compose--bàn-giao)
 11. [API đơn hàng – Lịch sử & Xác nhận (Task 9)](#11-api-đơn-hàng--lịch-sử--xác-nhận-task-9)
+12. [API đăng ký / đăng nhập – JWT (Task 7)](#12-api-đăng-ký--đăng-nhập--jwt-task-7)
 
 ---
 
@@ -508,7 +509,7 @@ Cả hai trang xử lý: đang tải, chưa đăng nhập / token hết hạn (`
 - **Task 7 (Đăng nhập – frontend)**: sau khi `POST /auth/login` thành công, gọi `setToken(accessToken)` trong `frontend/lib/auth.ts` (lưu `localStorage["accessToken"]`). Trang đăng nhập nên ở `/login` (nút "Đăng nhập" trỏ tới đây).
 - **Task 8 (Thanh toán – frontend)**: sau khi `POST /payments` trả kết quả (thành công **hoặc** thất bại), `router.push('/orders/' + orderId)` để vào màn hình xác nhận.
 - **Task 6 (`POST /orders`)** / **Task 8 (`POST /payments`)**: import `OrdersModule`, inject `OrdersRepository` rồi dùng `nextId()`, `nextItemIdValue()` và `save(order)` để tạo / cập nhật đơn – đơn sẽ tự xuất hiện ở `/orders/me`.
-- **Task 7 (Auth)**: ký JWT với `sub = user.id` bằng `JWT_SECRET`. Có thể dùng `JwtAuthGuard` và `@CurrentUser()` trong `src/common/auth/` để bảo vệ `POST /orders`.
+- **Task 7 (Auth)**: đã xong – xem [mục 12](#12-api-đăng-ký--đăng-nhập--jwt-task-7). Route đặt đơn chỉ cần `@UseGuards(JwtAuthGuard)` và `@CurrentUser()` (`src/common/auth/`); `OrdersController` đã gắn guard ở mức class nên `POST /orders` thêm vào sẽ tự được bảo vệ.
 - **Khi tích hợp Prisma**: chỉ cần thay thân các hàm trong `src/orders/orders.repository.ts`; service, controller và test e2e giữ nguyên.
 
 ### Test
@@ -517,4 +518,34 @@ Cả hai trang xử lý: đang tải, chưa đăng nhập / token hết hạn (`
 cd backend
 npm test                                   # unit test: orders.service, jwt-auth.guard, demo.controller
 npm run test:e2e -- orders.e2e-spec.ts     # e2e: 401 / 200 / 404 / 400 cho /orders/me, /orders/:id và luồng demo-session
+```
+
+---
+
+## 12. API đăng ký / đăng nhập – JWT (Task 7)
+
+Mã nguồn: `backend/src/auth/`. Mật khẩu băm bằng **bcrypt** (mặc định cost 10, đổi bằng `BCRYPT_ROUNDS` 4–15). JWT ký **HS256** bằng `JWT_SECRET`, sống **1 giờ**, payload `{ "sub": "<userId>", "email": "..." }`. Cần có `JWT_SECRET` trong `backend/.env` (`cp .env.example .env`) – backend tự đọc file này khi chạy local.
+
+| Endpoint | Body | Thành công | Lỗi |
+| -------- | ---- | ---------- | --- |
+| `POST /auth/register` | `{ "email", "password" }` (mật khẩu 8–72 ký tự) | `201` `{ id, email, loyaltyPoints }` | `400` dữ liệu sai, `409` email đã đăng ký |
+| `POST /auth/login` | `{ "email", "password" }` | `200` `{ accessToken, tokenType: "Bearer", expiresIn, user }` | `400` dữ liệu sai, `401` sai email/mật khẩu (cùng một thông báo) |
+
+Email được chuẩn hóa (cắt khoảng trắng, chữ thường). Phản hồi không bao giờ chứa mật khẩu hay hash.
+
+```bash
+curl -X POST localhost:3001/auth/register -H 'content-type: application/json' \
+  -d '{"email":"kh@maycha.vn","password":"matkhau123"}'
+curl -X POST localhost:3001/auth/login -H 'content-type: application/json' \
+  -d '{"email":"kh@maycha.vn","password":"matkhau123"}'
+# dùng accessToken: -H 'Authorization: Bearer <accessToken>'
+curl localhost:3001/orders/me -H 'Authorization: Bearer <accessToken>'
+```
+
+**Guard bảo vệ route đặt đơn:** `JwtAuthGuard` (`src/common/auth/jwt-auth.guard.ts`) trả `401` khi thiếu / sai chữ ký / hết hạn token. Tài khoản đang lưu **trong bộ nhớ** (mất khi restart) giống đơn hàng; khi có Prisma chỉ cần thay thân `src/auth/users.repository.ts`.
+
+```bash
+cd backend
+npm test                                  # unit: auth.service (bcrypt, JWT, 409, 401)
+npm run test:e2e -- auth.e2e-spec.ts      # e2e: register/login + guard 401/200
 ```
