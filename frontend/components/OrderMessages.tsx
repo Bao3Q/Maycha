@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import { createDemoSession, DEMO_ENABLED } from '../lib/api';
 import { setToken } from '../lib/auth';
@@ -56,6 +57,7 @@ export function LoginRequiredCard({
   message: string;
   onLoggedIn: () => void;
 }) {
+  const pathname = usePathname();
   const [busy, setBusy] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
 
@@ -81,7 +83,10 @@ export function LoginRequiredCard({
       <h2 className="text-lg font-semibold text-stone-900">Cần đăng nhập</h2>
       <p className="mt-1 text-sm text-stone-600">{message}</p>
       <div className="mt-5 flex flex-wrap justify-center gap-3">
-        <Link href="/login" className={primaryBtn}>
+        <Link
+          href={`/login?next=${encodeURIComponent(pathname || '/orders')}`}
+          className={primaryBtn}
+        >
           Đăng nhập
         </Link>
         {DEMO_ENABLED && (

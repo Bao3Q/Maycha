@@ -29,8 +29,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-maycha}:${POSTGRES_PASSWORD:-maycha_password}@db:5432/${POSTGRES_DB:-maycha_db}?schema=public
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       CORS_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
-      # Bật POST /dev/demo-session để demo khi chưa ghép Task 6/7/8 (đặt false khi nộp bản cuối)
-      ENABLE_DEMO_SEED: ${ENABLE_DEMO_SEED:-true}
+      # Mặc định tắt. Đặt ENABLE_DEMO_SEED=true trong .env nếu cần POST /dev/demo-session
+      ENABLE_DEMO_SEED: ${ENABLE_DEMO_SEED:-false}
     ports:
       - "3001:3001"
     depends_on:
@@ -44,7 +44,7 @@ services:
         # Trình duyệt gọi API qua cổng đã publish ra máy host
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
         # Hiện nút "Dùng tài khoản demo" ở trang Đơn hàng
-        NEXT_PUBLIC_ENABLE_DEMO: ${ENABLE_DEMO_SEED:-true}
+        NEXT_PUBLIC_ENABLE_DEMO: ${ENABLE_DEMO_SEED:-false}
     restart: unless-stopped
     ports:
       - "3000:3000"

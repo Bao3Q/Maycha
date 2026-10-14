@@ -1,18 +1,33 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   createContext,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
+  Suspense,
   useContext,
   useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
 } from "react";
+import {
+  API_URL,
+  type ApiResult,
+  createOrder,
+  type CreateOrderItem,
+  payOrder,
+  type PaymentMethod,
+} from "../lib/api";
+import { getToken } from "../lib/auth";
+import { AuthNav } from "../components/AuthNav";
 
-type Screen = "menu" | "detail" | "cart" | "checkout" | "success";
+// Sau khi thanh toán, trang chuyển sang /orders/<id> (màn hình xác nhận thật),
+// nên không còn màn "success" giả ở đây.
+type Screen = "menu" | "detail" | "cart" | "checkout";
 
 type Product = {
   id: string;
@@ -25,6 +40,8 @@ type Product = {
 
 type CartItem = {
   id: string;
+  /** Id sản phẩm gửi lên POST /orders (giỏ cũ chưa có thì tách từ `id`). */
+  productId?: string;
   name: string;
   size: string;
   quantity: number;
@@ -52,6 +69,7 @@ const isCartItem = (value: unknown): value is CartItem => {
   const item = value as Record<string, unknown>;
   return (
     typeof item.id === "string" &&
+    (item.productId === undefined || typeof item.productId === "string") &&
     typeof item.name === "string" &&
     typeof item.size === "string" &&
     typeof item.quantity === "number" &&
@@ -127,6 +145,26 @@ const getSizePriceDelta = (size: string) => {
 const getAdjustedItemPrice = (basePrice: number, size: string, toppings: string[]) =>
   basePrice + getSizePriceDelta(size) + toppings.length * toppingPrice;
 
+const paymentMethods: { label: string; method: PaymentMethod }[] = [
+  { label: "Ví điện tử", method: "WALLET" },
+  { label: "Thẻ ngân hàng", method: "CARD" },
+];
+
+/** Món trong giỏ → dòng gửi lên POST /orders. */
+const toOrderItem = (item: CartItem): CreateOrderItem => ({
+  productId: item.productId ?? item.id.split("-")[0],
+  productName: item.name,
+  size: item.size.replace(/^Size\s+/, "") as CreateOrderItem["size"],
+  toppings: item.toppings,
+  qty: item.quantity,
+  unitPrice: item.price,
+});
+
+const newIdempotencyKey = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 function CartProvider({ children }: { children: ReactNode }) {
   const cart = useSyncExternalStore(
     subscribeToCart,
@@ -152,24 +190,41 @@ function useCart() {
 export default function HomePage() {
   return (
     <CartProvider>
-      <HomePageContent />
+      {/* useSearchParams cần Suspense khi build production */}
+      <Suspense fallback={null}>
+        <HomePageContent />
+      </Suspense>
     </CartProvider>
   );
 }
 
 function HomePageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
-  const [screen, setScreen] = useState<Screen>("menu");
+  const [screenOverride, setScreen] = useState<Screen | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedSize, setSelectedSize] = useState("M");
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const { cart, setCart } = useCart();
-  const [payment, setPayment] = useState("Ví điện tử");
+  const [payment, setPayment] = useState<PaymentMethod>("WALLET");
+  const [simulateFailure, setSimulateFailure] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  // Đơn đã tạo nhưng thanh toán chưa xong: thử lại thì dùng lại đơn này
+  // (nếu giỏ không đổi) thay vì tạo đơn mới.
+  const [pendingOrder, setPendingOrder] = useState<{ id: number; cartKey: string } | null>(null);
+
+  // Quay về từ /login?next=/?view=checkout → mở lại đúng bước đang dở.
+  const view = searchParams.get("view");
+  const screen: Screen =
+    screenOverride ??
+    ((view === "cart" || view === "checkout") && cart.length > 0 ? (view as Screen) : "menu");
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch("http://localhost:3001/products", { cache: "no-store" });
+        const res = await fetch(`${API_URL}/products`, { cache: "no-store" });
         if (!res.ok) throw new Error("Failed to fetch products");
         const data: unknown = await res.json();
         if (!Array.isArray(data)) {
@@ -239,6 +294,7 @@ function HomePageContent() {
 
     const newItem: CartItem = {
       id: `${selectedProduct.id}-${selectedSize}-${toppingKey || "no-toppings"}`,
+      productId: selectedProduct.id,
       name: selectedProduct.name,
       size: `Size ${selectedSize}`,
       quantity: 1,
@@ -291,12 +347,61 @@ function HomePageContent() {
 
   const goBackToMenu = () => setScreen("menu");
   const goToCart = () => setScreen("cart");
-  const proceedToCheckout = () => setScreen("checkout");
-  const confirmPayment = () => setScreen("success");
-  const resetToMenu = () => {
-    setScreen("menu");
-    setCart([]);
-    setPayment("Ví điện tử");
+  const goToLogin = () =>
+    router.push(`/login?next=${encodeURIComponent("/?view=checkout")}`);
+
+  // Luồng nghiệp vụ (Mục 5 đề bài): Xem giỏ → Đăng nhập (nếu chưa) → Thanh toán.
+  const proceedToCheckout = () => {
+    if (!getToken()) {
+      goToLogin();
+      return;
+    }
+    setPayError(null);
+    setScreen("checkout");
+  };
+
+  const failPayment = (res: Extract<ApiResult<unknown>, { ok: false }>) => {
+    setPaying(false);
+    if (res.kind === "unauthenticated") {
+      goToLogin();
+      return;
+    }
+    setPayError(res.message);
+  };
+
+  /** POST /orders (PENDING) → POST /payments → màn hình xác nhận /orders/<id>. */
+  const confirmPayment = async () => {
+    if (paying || cart.length === 0) return;
+    if (!getToken()) {
+      goToLogin();
+      return;
+    }
+    setPaying(true);
+    setPayError(null);
+
+    const cartKey = JSON.stringify(cart);
+    let orderId = pendingOrder?.cartKey === cartKey ? pendingOrder.id : null;
+    if (orderId === null) {
+      const created = await createOrder(cart.map(toOrderItem));
+      if (!created.ok) return failPayment(created);
+      orderId = created.data.id;
+      setPendingOrder({ id: orderId, cartKey });
+    }
+
+    const paid = await payOrder(
+      orderId,
+      simulateFailure ? "FAIL" : payment,
+      newIdempotencyKey(),
+    );
+    if (!paid.ok) return failPayment(paid);
+
+    // Thành công → xóa giỏ. Thất bại (PAYMENT_FAILED) → giữ nguyên giỏ để
+    // khách thử lại (tiêu chí chấp nhận US-05).
+    if (paid.data.status === "PAID") {
+      setCart([]);
+      setPendingOrder(null);
+    }
+    router.push(`/orders/${orderId}`);
   };
 
   return (
@@ -304,7 +409,13 @@ function HomePageContent() {
       <div className="mx-auto max-w-300">
         {screen === "menu" && (
           <section className="rounded-[28px] bg-transparent">
-            <header className="mb-8 flex items-center justify-end border-b border-[#d8dde4] pb-6">
+            <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-[#d8dde4] pb-6">
+              <div className="flex items-center gap-6 text-[#1f2937]">
+                <Link href="/" className="text-[22px] font-black text-[#0a6b5f]">
+                  Maycha
+                </Link>
+                <AuthNav className="text-[16px]" />
+              </div>
               <button
                 onClick={goToCart}
                 className="flex items-center gap-3 rounded-[18px] border border-[#d7dfe6] bg-[#f5f7f8] px-5 py-3 text-[16px] font-medium text-[#1f2937] shadow-sm transition hover:bg-white"
@@ -339,7 +450,7 @@ function HomePageContent() {
 
                     <div className="mb-6 flex flex-1 items-end justify-between gap-3">
                       <span className="text-[18px] font-semibold text-[#1f2937]">{product.name}</span>
-                      <span className="text-[18px] font-semibold text-[#1f2937]">{product.price.toLocaleString("vi-VN")}k</span>
+                      <span className="text-[18px] font-semibold text-[#1f2937]">{product.price.toLocaleString("vi-VN")}đ</span>
                     </div>
 
                     <button
@@ -539,7 +650,7 @@ function HomePageContent() {
             <div className="space-y-4">
               <h3 className="mb-3 text-[30px] font-bold text-[#0f172a]">Phương thức thanh toán</h3>
 
-              {['Ví điện tử', 'Thẻ ngân hàng'].map((method) => (
+              {paymentMethods.map(({ label, method }) => (
                 <button
                   key={method}
                   onClick={() => setPayment(method)}
@@ -552,58 +663,52 @@ function HomePageContent() {
                   <span className="mr-4 inline-flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#0d8b7b]">
                     {payment === method && <span className="h-3 w-3 rounded-full bg-[#0d8b7b]" />}
                   </span>
-                  {method}
+                  {label}
                 </button>
               ))}
 
               <p className="mt-5 text-center text-[20px] text-[#6b7280]">Hệ thống không dùng tiền mặt</p>
+
+              {/* Cổng thanh toán là mock: cho phép demo nhánh PAYMENT_FAILED */}
+              <label className="flex items-center justify-center gap-3 text-[16px] text-[#6b7280]">
+                <input
+                  type="checkbox"
+                  checked={simulateFailure}
+                  onChange={(e) => setSimulateFailure(e.target.checked)}
+                  className="h-4 w-4 accent-[#991b1b]"
+                />
+                Giả lập thanh toán lỗi (demo)
+              </label>
             </div>
 
-            <div className="mt-10">
+            {payError && (
+              <p
+                role="alert"
+                className="mt-6 rounded-[14px] border border-[#fecaca] bg-[#fef2f2] px-5 py-4 text-center text-[18px] text-[#991b1b]"
+              >
+                {payError}
+              </p>
+            )}
+
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+              <button
+                onClick={goToCart}
+                disabled={paying}
+                className="flex-1 rounded-[18px] border-2 border-[#d7dfe6] bg-[#f8fafb] py-5 text-[24px] font-bold text-[#0f172a] transition hover:bg-white disabled:opacity-60"
+              >
+                Quay lại giỏ
+              </button>
               <button
                 onClick={confirmPayment}
-                className="w-full rounded-[18px] bg-[#0a6b5f] py-5 text-[24px] font-bold text-white shadow-[0_8px_18px_rgba(15,118,110,0.25)] transition hover:bg-[#085c51]"
+                disabled={paying || cart.length === 0}
+                className="flex-1 rounded-[18px] bg-[#0a6b5f] py-5 text-[24px] font-bold text-white shadow-[0_8px_18px_rgba(15,118,110,0.25)] transition hover:bg-[#085c51] disabled:opacity-60"
               >
-                Xác nhận trả
+                {paying ? "Đang thanh toán…" : "Xác nhận trả"}
               </button>
             </div>
           </section>
         )}
 
-        {screen === "success" && (
-          <section className="mx-auto max-w-245 px-2 py-8">
-            <div className="rounded-3xl border border-[#d7dfe6] bg-[#f7f8f9] px-8 py-12 text-center">
-              <div className="mx-auto mb-8 flex h-35 w-35 items-center justify-center rounded-full border-[6px] border-[#0d8b7b] bg-[#dff5f0] text-[64px] text-[#0d8b7b]">
-                ✓
-              </div>
-
-              <h2 className="text-[54px] font-black leading-[1.1] tracking-tighter text-[#0f172a]">
-                Đặt hàng thành công
-              </h2>
-              <p className="mt-4 text-[24px] text-[#4b5563]">Đơn hàng đã được gửi tới quầy pha chế.</p>
-
-              <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="rounded-2xl border border-[#d7dfe6] bg-[#f5f7f8] p-6 text-[28px] font-bold text-[#0f172a]">
-                  Mã đơn: #1042
-                </div>
-                <div className="rounded-2xl border border-[#d7dfe6] bg-[#f5f7f8] p-6 text-[28px] font-bold text-[#0d8b7b]">
-                  Trạng thái: PAID
-                </div>
-              </div>
-
-              <h3 className="mt-12 text-[40px] font-black tracking-[-0.04em] text-[#0d8b7b]">
-                Mời bạn tới quầy lấy nước
-              </h3>
-
-              <button
-                onClick={resetToMenu}
-                className="mt-10 w-full rounded-[18px] bg-[#0a6b5f] py-5 text-[32px] font-bold text-white shadow-[0_8px_18px_rgba(15,118,110,0.25)] transition hover:bg-[#085c51]"
-              >
-                Về trang chủ
-              </button>
-            </div>
-          </section>
-        )}
       </div>
     </main>
   );
