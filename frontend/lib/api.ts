@@ -5,7 +5,7 @@ export const API_URL = (
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 ).replace(/\/+$/, '');
 
-/** Bật nút "Dùng tài khoản demo" khi chưa có trang đăng nhập (Task 7). */
+/** Bật nút "Dùng tài khoản demo" (chỉ để demo, tắt khi nộp bản cuối). */
 export const DEMO_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEMO === 'true';
 
 // ---- Kiểu dữ liệu: khớp với OrderResponseDto ở backend ----
@@ -48,6 +48,7 @@ export type ApiErrorKind =
   | 'unauthenticated'
   | 'not-found'
   | 'bad-request'
+  | 'conflict'
   | 'network'
   | 'server';
 
@@ -106,17 +107,31 @@ async function request<T>(
   const message = await readMessage(res);
   switch (res.status) {
     case 401:
-      if (auth) clearToken();
+      if (auth) {
+        clearToken();
+        return {
+          ok: false,
+          kind: 'unauthenticated',
+          message: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.',
+        };
+      }
+      // Route không cần token (vd. /auth/login) → dùng thông báo của backend.
       return {
         ok: false,
         kind: 'unauthenticated',
-        message: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.',
+        message: message ?? 'Không xác thực được.',
       };
     case 404:
       return {
         ok: false,
         kind: 'not-found',
         message: message ?? 'Không tìm thấy dữ liệu.',
+      };
+    case 409:
+      return {
+        ok: false,
+        kind: 'conflict',
+        message: message ?? 'Dữ liệu bị trùng.',
       };
     case 400:
       return {
@@ -148,4 +163,80 @@ export function createDemoSession(): Promise<
   ApiResult<{ accessToken: string; orders: Order[] }>
 > {
   return request('/dev/demo-session', { method: 'POST', auth: false });
+}
+
+// ---- Đăng ký / đăng nhập (Task 7) ----
+
+export interface LoginResponse {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  user: { id: string; email: string; loyaltyPoints: number };
+}
+
+function jsonBody(body: unknown): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
+/** POST /auth/register */
+export function register(
+  email: string,
+  password: string,
+): Promise<ApiResult<LoginResponse['user']>> {
+  return request('/auth/register', {
+    ...jsonBody({ email, password }),
+    auth: false,
+  });
+}
+
+/** POST /auth/login → trả JWT. */
+export function login(
+  email: string,
+  password: string,
+): Promise<ApiResult<LoginResponse>> {
+  return request('/auth/login', { ...jsonBody({ email, password }), auth: false });
+}
+
+// ---- Đặt đơn (Task 6) & thanh toán (Task 8) ----
+
+export interface CreateOrderItem {
+  productId: string;
+  productName: string;
+  size: 'S' | 'M' | 'L';
+  toppings: string[];
+  qty: number;
+  unitPrice: number;
+}
+
+/** POST /orders – tạo đơn PENDING từ giỏ hàng. */
+export function createOrder(
+  items: CreateOrderItem[],
+): Promise<ApiResult<Order>> {
+  return request<Order>('/orders', jsonBody({ items }));
+}
+
+/** WALLET / CARD: thành công; FAIL: giả lập cổng thanh toán lỗi (demo). */
+export type PaymentMethod = 'WALLET' | 'CARD' | 'FAIL';
+
+export interface PaymentResponse {
+  success: boolean;
+  orderId: number;
+  status: OrderStatus;
+  message?: string;
+}
+
+/** POST /payments – thanh toán mock. */
+export function payOrder(
+  orderId: number,
+  method: PaymentMethod,
+  idempotencyKey: string,
+): Promise<ApiResult<PaymentResponse>> {
+  return request<PaymentResponse>(
+    '/payments',
+    jsonBody({ orderId, method, idempotencyKey }),
+  );
 }
