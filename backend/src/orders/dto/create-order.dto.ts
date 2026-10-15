@@ -1,13 +1,13 @@
 import { Type } from 'class-transformer';
-import { 
-  IsArray, 
-  IsEnum, 
-  IsNotEmpty, 
-  IsNumber, 
-  IsOptional, 
-  IsString, 
-  Min, 
-  ValidateNested 
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
 } from 'class-validator';
 
 export enum OrderSize {
@@ -34,11 +34,11 @@ export class CreateOrderItemDto {
   @IsOptional()
   toppings?: string[];
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   qty: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   unitPrice: number;
 }
@@ -48,4 +48,8 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items: CreateOrderItemDto[];
+
+  @IsString()
+  @IsOptional()
+  voucherCode?: string;
 }

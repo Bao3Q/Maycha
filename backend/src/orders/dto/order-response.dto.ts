@@ -17,6 +17,9 @@ export interface OrderResponseDto {
   /** Mã đơn hiển thị cho khách, ví dụ "#1042". */
   code: string;
   status: OrderStatus;
+  subtotal?: number;
+  discountAmount?: number;
+  voucherCode?: string;
   total: number;
   itemCount: number;
   createdAt: string;
@@ -29,6 +32,9 @@ export function toOrderResponse(order: Order): OrderResponseDto {
     id: order.id,
     code: `#${order.id}`,
     status: order.status,
+    subtotal: order.subtotal ?? order.total,
+    discountAmount: order.discountAmount ?? 0,
+    voucherCode: order.voucherCode,
     total: order.total,
     itemCount: order.items.reduce((sum, i) => sum + i.qty, 0),
     createdAt: order.createdAt.toISOString(),

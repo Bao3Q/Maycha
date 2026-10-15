@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import { JwtAuthGuard } from '../common/auth/jwt-auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthUser } from '../common/auth/auth-user.interface';
 import { CreateOrderDto } from './dto/create-order.dto'; // Import DTO tạo đơn hàng
+import { OrderStatus } from './entities/order.entity';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
@@ -45,5 +47,19 @@ export class OrdersController {
     id: number,
   ) {
     return this.ordersService.findMyOrder(user.id, id);
+  }
+
+  /** Task 10.1: Chuyển trạng thái đơn hàng (Order State Machine) */
+  @Patch(':id/status')
+  updateStatus(
+    @CurrentUser() user: AuthUser,
+    @Param(
+      'id',
+      new ParseIntPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST }),
+    )
+    id: number,
+    @Body('status') status: OrderStatus,
+  ) {
+    return this.ordersService.updateOrderStatus(user.id, id, status);
   }
 }

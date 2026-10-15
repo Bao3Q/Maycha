@@ -1,4 +1,11 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Headers,
+  UseGuards,
+} from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard';
@@ -11,7 +18,27 @@ export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
-  create(@CurrentUser() user: AuthUser, @Body() createPaymentDto: CreatePaymentDto) {
-    return this.paymentsService.processPayment(user.id, createPaymentDto);
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() createPaymentDto: CreatePaymentDto,
+    @Headers('idempotency-key') headerKey?: string,
+    @Headers('x-idempotency-key') xHeaderKey?: string,
+  ) {
+    // Ưu tiên key từ header nếu có, nếu không thì dùng key từ body
+    const idempotencyKey =
+      headerKey || xHeaderKey || createPaymentDto.idempotencyKey;
+    return this.paymentsService.processPayment(user.id, {
+      ...createPaymentDto,
+      idempotencyKey,
+    });
+  }
+
+  /** Task 10.4: Xem điểm thưởng tích lũy của tài khoản */
+  @Get('loyalty')
+  getLoyalty(@CurrentUser() user: AuthUser) {
+    return {
+      userId: user.id,
+      loyaltyPoints: this.paymentsService.getLoyaltyPoints(user.id),
+    };
   }
 }

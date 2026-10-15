@@ -35,6 +35,9 @@ export interface Order {
   /** Mã đơn hiển thị, ví dụ "#1042". */
   code: string;
   status: OrderStatus;
+  subtotal?: number;
+  discountAmount?: number;
+  voucherCode?: string;
   total: number;
   itemCount: number;
   createdAt: string;
@@ -148,4 +151,23 @@ export function createDemoSession(): Promise<
   ApiResult<{ accessToken: string; orders: Order[] }>
 > {
   return request('/dev/demo-session', { method: 'POST', auth: false });
+}
+
+/** PATCH /orders/:id/status – chuyển trạng thái đơn (Task 10.1 Order State Machine). */
+export function updateOrderStatus(
+  id: number | string,
+  status: OrderStatus,
+): Promise<ApiResult<Order>> {
+  return request<Order>(`/orders/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** GET /payments/loyalty – lấy điểm thưởng tích lũy của user (Task 10.4). */
+export function fetchLoyaltyPoints(): Promise<
+  ApiResult<{ userId: string; loyaltyPoints: number }>
+> {
+  return request<{ userId: string; loyaltyPoints: number }>('/payments/loyalty');
 }

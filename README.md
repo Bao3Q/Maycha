@@ -98,6 +98,7 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 9. [Quy tắc làm việc nhóm](#9-quy-tắc-làm-việc-nhóm)
 10. [Docker Compose & bàn giao](#10-docker-compose--bàn-giao)
 11. [API đơn hàng – Lịch sử & Xác nhận (Task 9)](#11-api-đơn-hàng--lịch-sử--xác-nhận-task-9)
+12. [Nghiệp vụ đặt hàng & thanh toán (Task 10)](#12-nghiệp-vụ-đặt-hàng--thanh-toán-task-10)
 
 ---
 
@@ -109,6 +110,7 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 | Frontend – xác nhận & lịch sử đơn (Task 9) | ✅ `/orders/[id]` (màn hình xác nhận), `/orders` (lịch sử) – gọi API thật kèm JWT |
 | Backend (NestJS) | ✅ `GET /`, `GET /products`, `GET /products/:id` |
 | Backend – lịch sử & xác nhận đơn (Task 9) | ✅ `GET /orders/me`, `GET /orders/:id` (cần JWT) – dữ liệu đơn đang lưu trong bộ nhớ, chờ Prisma |
+| Backend – nghiệp vụ đặt hàng & thanh toán (Task 10) | ✅ State machine, idempotency, kiểm soát tồn kho theo version, voucher và loyalty – dữ liệu hiện lưu trong bộ nhớ, chỉ bảo đảm giao dịch trong một tiến trình |
 | Đọc file `.env` ở backend | ✅ `process.loadEnvFile()` trong `main.ts` |
 | PostgreSQL / Prisma | ⚠️ Đã có container PostgreSQL trong Docker Compose; **chưa tích hợp Prisma** |
 | Docker Compose | ✅ `docker-compose.yml` chạy `db` + `backend` + `frontend` |
@@ -517,4 +519,28 @@ Cả hai trang xử lý: đang tải, chưa đăng nhập / token hết hạn (`
 cd backend
 npm test                                   # unit test: orders.service, jwt-auth.guard, demo.controller
 npm run test:e2e -- orders.e2e-spec.ts     # e2e: 401 / 200 / 404 / 400 cho /orders/me, /orders/:id và luồng demo-session
+```
+
+## 12. Nghiệp vụ đặt hàng & thanh toán (Task 10)
+
+Các API nghiệp vụ cần JWT:
+
+| Endpoint | Mô tả |
+| -------- | ----- |
+| `POST /orders` | Kiểm tra giỏ hàng và voucher, giữ tồn kho, tạo đơn `PENDING`; nếu thao tác lưu đơn lỗi thì tồn kho được rollback |
+| `PATCH /orders/:id/status` | Chỉ cho phép các bước theo state machine; khi hủy đơn, cập nhật trạng thái và hoàn kho cùng một giao dịch bộ nhớ |
+| `POST /payments` | Mock thanh toán `MOMO`/`VNPAY`; gửi `Idempotency-Key` (hoặc `X-Idempotency-Key`) để phát lại kết quả của cùng yêu cầu |
+| `GET /payments/loyalty` | Trả số điểm loyalty của tài khoản |
+
+State machine chính: `PENDING → PAID → PREPARING → READY → COMPLETED`. `PENDING` và `PAID` có thể chuyển sang `CANCELLED`; `PAYMENT_FAILED` có thể thanh toán lại thành `PAID` hoặc hủy. Trạng thái kết thúc không được chuyển tiếp.
+
+Mỗi key idempotency được giới hạn theo user và nội dung yêu cầu. Dùng lại key với đơn/phương thức khác trả `409 Conflict`. Voucher hiện có: `MAYCHA10` giảm 10% và `BREWLITE20` giảm tối đa 20.000đ. Điểm được cộng sau thanh toán thành công, theo tỷ lệ 1 điểm / 10.000đ thực trả.
+
+**Giới hạn triển khai hiện tại:** đơn hàng, tồn kho, kết quả idempotency và điểm thưởng đều là dữ liệu trong bộ nhớ. Kiểm tra version cùng rollback bảo đảm nhất quán trong một tiến trình NestJS; dữ liệu mất khi restart và không bảo vệ các instance độc lập. Muốn triển khai nhiều instance/production, cần chuyển các thao tác này sang transaction PostgreSQL (ví dụ conditional `UPDATE ... WHERE version = ?`, cùng ghi đơn, idempotency và loyalty trong transaction).
+
+### Test Task 10
+
+```powershell
+cd backend
+npm test -- --runInBand src/orders/task10.spec.ts
 ```

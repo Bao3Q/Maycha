@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   createContext,
   type Dispatch,
@@ -304,16 +305,27 @@ function HomePageContent() {
       <div className="mx-auto max-w-300">
         {screen === "menu" && (
           <section className="rounded-[28px] bg-transparent">
-            <header className="mb-8 flex items-center justify-end border-b border-[#d8dde4] pb-6">
-              <button
-                onClick={goToCart}
-                className="flex items-center gap-3 rounded-[18px] border border-[#d7dfe6] bg-[#f5f7f8] px-5 py-3 text-[16px] font-medium text-[#1f2937] shadow-sm transition hover:bg-white"
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M3 3h7l1.5 9h8.5l-1.5 9H7.5L5 3H3zm3.5 15.5h8.5M8 7h8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Xem giỏ hàng ({cartItemCount})
-              </button>
+            <header className="mb-8 flex items-center justify-between border-b border-[#d8dde4] pb-6">
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-black text-[#0a6b5f]">Maycha</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/orders"
+                  className="flex items-center gap-2 rounded-[18px] border border-[#0d8b7b] bg-[#dff5f0] px-5 py-3 text-[16px] font-semibold text-[#0a6b5f] shadow-sm transition hover:bg-[#cceed6]"
+                >
+                  📜 Đơn hàng & Lịch sử
+                </Link>
+                <button
+                  onClick={goToCart}
+                  className="flex items-center gap-3 rounded-[18px] border border-[#d7dfe6] bg-[#f5f7f8] px-5 py-3 text-[16px] font-medium text-[#1f2937] shadow-sm transition hover:bg-white"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M3 3h7l1.5 9h8.5l-1.5 9H7.5L5 3H3zm3.5 15.5h8.5M8 7h8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Xem giỏ hàng ({cartItemCount})
+                </button>
+              </div>
             </header>
 
             <div className="mx-auto max-w-245 pt-2">
@@ -595,12 +607,20 @@ function HomePageContent() {
                 Mời bạn tới quầy lấy nước
               </h3>
 
-              <button
-                onClick={resetToMenu}
-                className="mt-10 w-full rounded-[18px] bg-[#0a6b5f] py-5 text-[32px] font-bold text-white shadow-[0_8px_18px_rgba(15,118,110,0.25)] transition hover:bg-[#085c51]"
-              >
-                Về trang chủ
-              </button>
+              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+                <Link
+                  href="/orders"
+                  className="flex-1 rounded-[18px] bg-[#0a6b5f] py-5 text-center text-[26px] font-bold text-white shadow-[0_8px_18px_rgba(15,118,110,0.25)] transition hover:bg-[#085c51]"
+                >
+                  Xem lịch sử đơn hàng
+                </Link>
+                <button
+                  onClick={resetToMenu}
+                  className="flex-1 rounded-[18px] border-2 border-[#d7dfe6] bg-[#f8fafb] py-5 text-[26px] font-bold text-[#0f172a] transition hover:bg-white"
+                >
+                  Về trang chủ
+                </button>
+              </div>
             </div>
           </section>
         )}
