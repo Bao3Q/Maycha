@@ -291,6 +291,8 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
     });
 
     it('không hoàn kho nếu cập nhật trạng thái hủy thất bại', () => {
+      productsService.setStockForTest('3', 10, 1);
+
       const order = ordersService.createOrder('u1', {
         items: [
           {

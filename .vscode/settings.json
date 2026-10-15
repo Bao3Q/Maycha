@@ -1,0 +1,16 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "maycha-local",
+            "database": "maycha_db",
+            "username": "maycha",
+            "password": "maycha_password",
+            "connectionTimeout": 30
+        }
+    ]
+}

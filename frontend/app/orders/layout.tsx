@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { AuthNav } from '../../components/AuthNav';
 
 export const metadata: Metadata = {
   title: 'Đơn hàng | Maycha',
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 /** Khung chung cho /orders và /orders/[id]. */
 export default function OrdersLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900">
+    <div className="min-h-screen w-full bg-stone-50 text-stone-900">
       <header className="border-b border-stone-200 bg-white">
         <nav className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
           <Link href="/" className="text-lg font-bold text-emerald-800">
@@ -20,9 +21,7 @@ export default function OrdersLayout({ children }: { children: ReactNode }) {
             <Link href="/" className="hover:text-emerald-800">
               Menu
             </Link>
-            <Link href="/orders" className="hover:text-emerald-800">
-              Đơn của tôi
-            </Link>
+            <AuthNav />
           </div>
         </nav>
       </header>

@@ -23,7 +23,13 @@ interface IdempotencyRecord {
   result: PaymentResult;
 }
 
-const ACCEPTED_PAYMENT_METHODS = new Set(['MOMO', 'VNPAY', 'FAIL']);
+const ACCEPTED_PAYMENT_METHODS = new Set([
+  'WALLET',
+  'CARD',
+  'MOMO',
+  'VNPAY',
+  'FAIL',
+]);
 
 @Injectable()
 export class PaymentsService {
