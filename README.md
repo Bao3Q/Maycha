@@ -117,7 +117,7 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 | Backend – nghiệp vụ đặt hàng & thanh toán (Task 10) | ✅ State machine, idempotency, kiểm soát tồn kho theo version, voucher và loyalty – dữ liệu hiện lưu trong bộ nhớ, bảo đảm giao dịch trong một tiến trình |
 | Validate đầu vào | ✅ `ValidationPipe` toàn cục (`src/app.setup.ts`) – dữ liệu sai trả `400` |
 | Đọc file `.env` ở backend | ✅ `process.loadEnvFile()` trong `main.ts` |
-| PostgreSQL / Prisma | ⚠️ Đã có container PostgreSQL trong Docker Compose; **backend chưa dùng DB** – user và đơn hàng đang lưu trong bộ nhớ (mất khi restart backend) |
+| PostgreSQL / Prisma | 🟡 Đã có PostgreSQL, Prisma schema và cấu hình migrate/generate; backend **chưa nối repository vào DB**, nên user và đơn hàng vẫn lưu trong bộ nhớ (mất khi restart backend) |
 | Docker Compose | ✅ `docker-compose.yml` chạy `db` + `backend` + `frontend` |
 | Dữ liệu demo | ✅ `POST /dev/demo-session` – **mặc định tắt**, bật bằng `ENABLE_DEMO_SEED=true` |
 
@@ -275,7 +275,7 @@ File: `backend/.env` (tạo từ `backend/.env.example`).
 | Biến | Giá trị mẫu | Đang được dùng? | Ý nghĩa |
 | ---- | ----------- | --------------- | ------- |
 | `PORT` | `3001` | ✅ | Cổng backend, mặc định `3001` |
-| `DATABASE_URL` | `postgresql://maycha:maycha_password@localhost:5432/maycha_db?schema=public` | ❌ Chưa | Chuỗi kết nối PostgreSQL cho Prisma. Khớp với service `db` trong Docker Compose |
+| `DATABASE_URL` | Chuỗi PostgreSQL trong `.env.example` | ✅ Prisma CLI | Kết nối cho Prisma migration; backend API hiện chưa nối repository vào DB |
 | `JWT_SECRET` | `super_secret_key_123` | ✅ | Khóa ký/xác thực JWT (HS256). `POST /auth/login` (Task 7) **phải ký bằng cùng khóa này** |
 | `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | ✅ | Danh sách origin frontend được gọi API, cách nhau bằng dấu phẩy |
 | `ENABLE_DEMO_SEED` | `false` | ✅ | `true` = bật `POST /dev/demo-session` (token + đơn mẫu cho tài khoản demo). Bản nộp để `false` |
@@ -329,6 +329,11 @@ Trước khi báo "chạy được", tự kiểm tra đủ các mục:
 | `npm run test:e2e` | Test end-to-end |
 | `npm run lint` | Kiểm tra code (oxlint) |
 | `npm run format` | Định dạng code (Prettier) |
+| `npm run prisma:generate` | Sinh Prisma Client từ `prisma/schema.prisma` |
+| `npm run prisma:migrate` | Áp dụng migration còn thiếu; thêm `-- --name <tên>` khi tạo migration mới |
+| `npm run prisma:studio` | Mở Prisma Studio để xem dữ liệu |
+
+Prisma schema, migration đầu tiên và `DATABASE_URL` được khai báo trong `prisma/schema.prisma`, `prisma/migrations/` và `prisma.config.ts`. Để áp dụng migration, khởi động PostgreSQL trước rồi chạy `npm run prisma:migrate` từ `backend/`. Client được sinh vào `backend/generated/prisma/` (không commit). Đây mới là thiết lập schema; các repository NestJS hiện vẫn dùng bộ nhớ trong.
 
 ### Frontend (`frontend/`)
 
