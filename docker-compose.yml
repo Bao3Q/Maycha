@@ -22,7 +22,7 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build: ./apps/api
     restart: unless-stopped
     environment:
       PORT: 3001
@@ -39,7 +39,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./apps/web
       args:
         # Trình duyệt gọi API qua cổng đã publish ra máy host
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}

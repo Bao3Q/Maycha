@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: maycha
+          POSTGRES_PASSWORD: maycha_password
+          POSTGRES_DB: maycha_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U maycha -d maycha_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://maycha:maycha_password@localhost:5432/maycha_db?schema=public
+      JWT_SECRET: ci_test_secret
+      PORT: 3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/api/package-lock.json
+            apps/web/package-lock.json
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+      - name: Apply database migrations
+        working-directory: apps/api
+        run: npm run prisma:deploy
+      - name: Validate API
+        working-directory: apps/api
+        run: |
+          npm run build
+          npm run lint
+          npm test -- --runInBand
+          npm run test:e2e -- --runInBand
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Validate web
+        working-directory: apps/web
+        run: |
+          npm run lint
+          npm run build
