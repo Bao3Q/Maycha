@@ -41,8 +41,9 @@ services:
     build:
       context: ./apps/web
       args:
-        # Trình duyệt gọi API qua cổng đã publish ra máy host
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        # Để trống thì frontend gọi API qua Next.js same-origin proxy
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        API_PROXY_TARGET: http://backend:3001
         # Hiện nút "Dùng tài khoản demo" ở trang Đơn hàng
         NEXT_PUBLIC_ENABLE_DEMO: ${ENABLE_DEMO_SEED:-false}
     restart: unless-stopped

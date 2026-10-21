@@ -1,9 +1,10 @@
 import { clearToken, getToken } from './auth';
 
-/** Trình duyệt gọi thẳng backend (xem NEXT_PUBLIC_API_URL trong README). */
-export const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
-).replace(/\/+$/, '');
+/** Use a same-origin Next.js proxy by default; set this to call an API directly. */
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+export const API_URL = configuredApiUrl
+  ? configuredApiUrl.replace(/\/+$/, '')
+  : undefined;
 
 /** Bật nút "Dùng tài khoản demo" (chỉ để demo, tắt khi nộp bản cuối). */
 export const DEMO_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEMO === 'true';
@@ -75,6 +76,7 @@ async function request<T>(
   const { auth = true, ...rest } = init;
   const headers = new Headers(rest.headers);
   headers.set('Accept', 'application/json');
+  headers.set('ngrok-skip-browser-warning', '1');
 
   if (auth) {
     const token = getToken();
@@ -90,7 +92,8 @@ async function request<T>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    const requestUrl = API_URL ? `${API_URL}${path}` : `/api${path}`;
+    res = await fetch(requestUrl, {
       ...rest,
       headers,
       cache: 'no-store',
@@ -99,7 +102,7 @@ async function request<T>(
     return {
       ok: false,
       kind: 'network',
-      message: `Không kết nối được tới máy chủ (${API_URL}).`,
+      message: `Không kết nối được tới máy chủ (${API_URL ?? 'API proxy'}).`,
     };
   }
 

@@ -36,4 +36,6 @@ npm install
 npm run dev
 ```
 
-Set `DATABASE_URL` and `JWT_SECRET` in `apps/api/.env` as needed. The web app reads `NEXT_PUBLIC_API_URL` from `apps/web/.env.local` (default API URL: `http://localhost:3001`).
+Set `DATABASE_URL` and `JWT_SECRET` in `apps/api/.env` as needed. By default, the web app sends API requests through a same-origin Next.js proxy to `http://localhost:3001` during local development. Docker Compose configures the proxy target as `http://backend:3001`. Set `NEXT_PUBLIC_API_URL` only when the browser should call a separate, directly accessible API URL.
+
+This same-origin proxy also lets the frontend and API share one public ngrok URL. `NEXT_PUBLIC_API_URL` and `API_PROXY_TARGET` are applied at build time, so rebuild the frontend after changing either value.

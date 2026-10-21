@@ -279,7 +279,10 @@ function HomePageContent() {
       setProductsError(null);
 
       try {
-        const res = await fetch(`${API_URL}/products`, { cache: "no-store" });
+        const res = await fetch(`${API_URL ?? "/api"}/products`, {
+          headers: { "ngrok-skip-browser-warning": "1" },
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to fetch products");
         const data: unknown = await res.json();
         if (!Array.isArray(data)) {
