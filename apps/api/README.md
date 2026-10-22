@@ -19,6 +19,8 @@ The API listens on port `3001` by default. Docker Compose starts PostgreSQL and 
 
 ## Validation
 
+`npm run build` regenerates Prisma Client from `prisma/schema.prisma` before compiling NestJS.
+
 ```powershell
 npm run build
 npm run lint
