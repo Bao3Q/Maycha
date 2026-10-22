@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -17,7 +16,6 @@ export interface ProductItem {
   price: number;
   imageUrl: string;
   stock: number;
-  version: number;
 }
 
 export interface StockRequest {
@@ -34,7 +32,6 @@ export class ProductsService implements OnModuleInit {
       price: 35000,
       imageUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSfPmaUq0ZUeh60MyAzdACJq5NI9F-9tj4X2Qdkk9zRQQ&s=10',
       stock: 50,
-      version: 1,
     },
     {
       id: '2',
@@ -42,7 +39,6 @@ export class ProductsService implements OnModuleInit {
       price: 39000,
       imageUrl: 'https://cdn.tgdd.vn/2020/07/CookRecipe/GalleryStep/thanh-pham-273.jpg',
       stock: 40,
-      version: 1,
     },
     {
       id: '3',
@@ -50,7 +46,6 @@ export class ProductsService implements OnModuleInit {
       price: 30000,
       imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=500',
       stock: 30,
-      version: 1,
     },
     {
       id: '4',
@@ -58,7 +53,6 @@ export class ProductsService implements OnModuleInit {
       price: 45000,
       imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=500',
       stock: 25,
-      version: 1,
     },
   ];
 
@@ -104,16 +98,11 @@ export class ProductsService implements OnModuleInit {
     return this.findOne(id);
   }
 
-  /**
-   * Trừ tồn kho với kiểm soát đồng thời (Optimistic Locking) theo Task 10.3.
-   * Bắt buộc kiểm tra version mà bên gọi đã đọc trước khi cập nhật.
-   * Nếu stock < qty: ném BadRequestException.
-   */
-  deductStock(
-    productId: string,
-    qty: number,
-    expectedVersion: number,
-  ): { product: ProductItem; remainingStock: number } {
+  /** Trừ tồn kho; nếu stock < qty thì ném BadRequestException. */
+  deductStock(productId: string, qty: number): {
+    product: ProductItem;
+    remainingStock: number;
+  } {
     const product = this.products.find((item) => item.id === productId);
     if (!product) {
       throw new NotFoundException(`Sản phẩm với ID ${productId} không tồn tại`);
@@ -123,12 +112,6 @@ export class ProductsService implements OnModuleInit {
       throw new BadRequestException('Số lượng đặt phải là số nguyên dương');
     }
 
-    if (product.version !== expectedVersion) {
-      throw new ConflictException(
-        `Xung đột dữ liệu (Optimistic Lock): sản phẩm "${product.name}" đã bị thay đổi bởi giao dịch khác`,
-      );
-    }
-
     if (product.stock < qty) {
       throw new BadRequestException(
         `Sản phẩm "${product.name}" không đủ số lượng tồn kho (còn ${product.stock}, yêu cầu ${qty})`,
@@ -136,7 +119,6 @@ export class ProductsService implements OnModuleInit {
     }
 
     product.stock -= qty;
-    product.version += 1;
 
     return { product: { ...product }, remainingStock: product.stock };
   }
@@ -174,7 +156,7 @@ export class ProductsService implements OnModuleInit {
       quantities.set(productId, totalQty);
     }
 
-    const snapshots = new Map<string, { stock: number; version: number }>();
+    const snapshots = new Map<string, { stock: number }>();
     for (const [productId, qty] of quantities) {
       const product = this.products.find((item) => item.id === productId);
       if (!product) {
@@ -193,27 +175,17 @@ export class ProductsService implements OnModuleInit {
       ) {
         throw new BadRequestException('Số lượng tồn kho sau khi hoàn không hợp lệ');
       }
-      snapshots.set(productId, {
-        stock: product.stock,
-        version: product.version,
-      });
+      snapshots.set(productId, { stock: product.stock });
     }
 
     const changedProductIds: string[] = [];
     try {
       for (const [productId, qty] of quantities) {
-        const snapshot = snapshots.get(productId)!;
         if (operationType === 'reserve') {
-          this.deductStock(productId, qty, snapshot.version);
+          this.deductStock(productId, qty);
         } else {
           const product = this.products.find((item) => item.id === productId)!;
-          if (product.version !== snapshot.version) {
-            throw new ConflictException(
-              `Xung đột dữ liệu (Optimistic Lock): sản phẩm "${product.name}" đã bị thay đổi bởi giao dịch khác`,
-            );
-          }
           product.stock += qty;
-          product.version += 1;
         }
         changedProductIds.push(productId);
       }
@@ -224,7 +196,6 @@ export class ProductsService implements OnModuleInit {
         const snapshot = snapshots.get(productId)!;
         if (product) {
           product.stock = snapshot.stock;
-          product.version = snapshot.version;
         }
       }
       throw error;
@@ -234,11 +205,10 @@ export class ProductsService implements OnModuleInit {
   /**
    * Dùng để thiết lập tồn kho mẫu trong unit/integration test.
    */
-  setStockForTest(productId: string, stock: number, version = 1): void {
+  setStockForTest(productId: string, stock: number): void {
     const product = this.products.find((item) => item.id === productId);
     if (product) {
       product.stock = stock;
-      product.version = version;
     }
   }
 

@@ -99,7 +99,7 @@ export class OrdersService {
           }
           const updated = await tx.product.updateMany({
             where: { id: productId, stock: { gte: qty } },
-            data: { stock: { decrement: qty }, version: { increment: 1 } },
+            data: { stock: { decrement: qty } },
           });
           if (updated.count !== 1) {
             throw new ConflictException(
@@ -218,7 +218,7 @@ export class OrdersService {
           for (const [productId, qty] of quantities) {
             await tx.product.update({
               where: { id: productId },
-              data: { stock: { increment: qty }, version: { increment: 1 } },
+              data: { stock: { increment: qty } },
             });
           }
         }

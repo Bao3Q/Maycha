@@ -9,6 +9,7 @@ import {
   VALID_ORDER_TRANSITIONS,
 } from './entities/order.entity';
 import { OrderSize } from './dto/create-order.dto';
+import { PaymentMethod } from '../payments/dto/create-payment.dto';
 
 describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
   let ordersRepo: OrdersRepository;
@@ -194,7 +195,7 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
       });
       const paymentRequest = {
         orderId: order.id,
-        method: 'MOMO',
+        method: 'MOMO' as const,
         idempotencyKey: 'user-scoped-payment-key',
       };
       await paymentsService.processPayment('u1', paymentRequest);
@@ -220,7 +221,7 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
       await expect(
         paymentsService.processPayment('u1', {
           orderId: order.id,
-          method: 'UNKNOWN',
+          method: 'UNKNOWN' as PaymentMethod,
         }),
       ).rejects.toThrow(BadRequestException);
       expect((await ordersService.findMyOrder('u1', order.id)).status).toBe(
@@ -232,7 +233,7 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
   describe('3. Kiểm soát tồn kho khi đặt đồng thời (Concurrency Control)', () => {
     it('khi nhiều khách đặt cùng lúc, không bao giờ bán vượt quá số lượng tồn kho còn lại', async () => {
       // Giả lập sản phẩm '1' chỉ còn đúng 3 ly trong kho
-      productsService.setStockForTest('1', 3, 1);
+      productsService.setStockForTest('1', 3);
 
       // 5 khách cùng tranh mua sản phẩm '1' (mỗi người 1 ly)
       const concurrentOrders = [1, 2, 3, 4, 5].map((clientIndex) => {
@@ -266,7 +267,7 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
     });
 
     it('hoàn lại tồn kho khi đơn hàng bị hủy (CANCELLED)', async () => {
-      productsService.setStockForTest('3', 10, 1);
+      productsService.setStockForTest('3', 10);
 
       const order = await ordersService.createOrder('u1', {
         items: [
@@ -291,7 +292,7 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
     });
 
     it('không hoàn kho nếu cập nhật trạng thái hủy thất bại', async () => {
-      productsService.setStockForTest('3', 10, 1);
+      productsService.setStockForTest('3', 10);
 
       const order = await ordersService.createOrder('u1', {
         items: [
@@ -314,7 +315,6 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
 
       expect(productsService.findOne('3')).toMatchObject({
         stock: 8,
-        version: 2,
       });
       expect((await ordersService.findMyOrder('u1', order.id)).status).toBe(
         OrderStatus.PENDING,
@@ -322,8 +322,8 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
     });
 
     it('không trừ bất kỳ tồn kho nào nếu một sản phẩm trong giỏ không đủ hàng', async () => {
-      productsService.setStockForTest('1', 3, 7);
-      productsService.setStockForTest('2', 0, 4);
+      productsService.setStockForTest('1', 3);
+      productsService.setStockForTest('2', 0);
 
       await expect(
         ordersService.createOrder('u1', {
@@ -346,19 +346,13 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
         }),
       ).rejects.toThrow(BadRequestException);
 
-      expect(productsService.findOne('1')).toMatchObject({
-        stock: 3,
-        version: 7,
-      });
-      expect(productsService.findOne('2')).toMatchObject({
-        stock: 0,
-        version: 4,
-      });
+      expect(productsService.findOne('1')).toMatchObject({ stock: 3 });
+      expect(productsService.findOne('2')).toMatchObject({ stock: 0 });
       expect(await ordersService.findMyOrders('u1')).toHaveLength(0);
     });
 
-    it('khôi phục tồn kho và version nếu lưu đơn hàng thất bại trong transaction', async () => {
-      productsService.setStockForTest('1', 3, 7);
+    it('khôi phục tồn kho nếu lưu đơn hàng thất bại trong transaction', async () => {
+      productsService.setStockForTest('1', 3);
       jest.spyOn(ordersRepo, 'save').mockImplementation(() => {
         throw new Error('storage failure');
       });
@@ -377,22 +371,14 @@ describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
         }),
       ).rejects.toThrow('storage failure');
 
-      expect(productsService.findOne('1')).toMatchObject({
-        stock: 3,
-        version: 7,
-      });
+      expect(productsService.findOne('1')).toMatchObject({ stock: 3 });
     });
 
-    it('báo conflict khi version sản phẩm cũ không còn khớp', () => {
-      productsService.setStockForTest('1', 3, 7);
+    it('trừ tồn kho nếu còn đủ số lượng', () => {
+      productsService.setStockForTest('1', 3);
 
-      expect(() => productsService.deductStock('1', 1, 6)).toThrow(
-        ConflictException,
-      );
-      expect(productsService.findOne('1')).toMatchObject({
-        stock: 3,
-        version: 7,
-      });
+      expect(productsService.deductStock('1', 1).remainingStock).toBe(2);
+      expect(productsService.findOne('1')).toMatchObject({ stock: 2 });
     });
   });
 
