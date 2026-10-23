@@ -1,15 +1,15 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, type FormEvent } from 'react';
 import { login, register } from '../../lib/api';
 import { safeNextPath, setToken } from '../../lib/auth';
+import { SiteHeader } from '../../components/SiteHeader';
 
 type Mode = 'login' | 'register';
 
 const inputClass =
-  'mt-1 w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-base outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100';
+  'mt-2 w-full rounded-xl border border-line bg-paper px-4 py-3 text-[16px] outline-none transition-colors placeholder:text-muted/60 focus:border-leaf focus:ring-4 focus:ring-matcha';
 
 /**
  * Đăng nhập / Đăng ký – gọi POST /auth/login, /auth/register (Task 7).
@@ -18,6 +18,7 @@ const inputClass =
 function LoginForm() {
   const router = useRouter();
   const next = safeNextPath(useSearchParams().get('next'));
+  const fromCheckout = next.includes('view=checkout');
 
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
@@ -56,29 +57,53 @@ function LoginForm() {
   const isLogin = mode === 'login';
 
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
-      <h1 className="text-2xl font-bold">
-        {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
+    <div className="rounded-3xl border border-line bg-paper p-6 sm:p-10">
+      {/* Chuyển đổi Đăng nhập / Đăng ký */}
+      <div className="grid grid-cols-2 rounded-full bg-sage p-1 text-[15px] font-semibold" role="tablist">
+        {(['login', 'register'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="tab"
+            aria-selected={mode === m}
+            onClick={() => {
+              setMode(m);
+              setError(null);
+            }}
+            className={`rounded-full py-2.5 transition-colors ${
+              mode === m ? 'bg-paper text-ink shadow-sm' : 'text-muted hover:text-ink'
+            }`}
+          >
+            {m === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+          </button>
+        ))}
+      </div>
+
+      <h1 className="mt-8 font-display text-[32px] font-extrabold leading-tight tracking-[-0.02em]">
+        {isLogin ? 'Chào bạn quay lại' : 'Tạo tài khoản Maycha'}
       </h1>
-      <p className="mt-1 text-sm text-stone-600">
-        {isLogin
-          ? 'Đăng nhập để thanh toán và xem lịch sử đơn.'
-          : 'Chỉ cần email và mật khẩu (8–72 ký tự).'}
+      <p className="mt-2 text-[15px] text-muted">
+        {fromCheckout
+          ? 'Đăng nhập để thanh toán. Giỏ hàng của bạn vẫn được giữ nguyên.'
+          : isLogin
+            ? 'Đăng nhập để thanh toán và xem lại các đơn đã đặt.'
+            : 'Chỉ cần email và mật khẩu từ 8 đến 72 ký tự.'}
       </p>
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate={false}>
-        <label className="block text-sm font-medium text-stone-700">
+      <form onSubmit={onSubmit} className="mt-8 space-y-5">
+        <label className="block text-[14px] font-medium">
           Email
           <input
             type="email"
             required
             autoComplete="email"
+            placeholder="ban@email.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className={inputClass}
           />
         </label>
-        <label className="block text-sm font-medium text-stone-700">
+        <label className="block text-[14px] font-medium">
           Mật khẩu
           <input
             type="password"
@@ -86,6 +111,7 @@ function LoginForm() {
             minLength={isLogin ? undefined : 8}
             maxLength={72}
             autoComplete={isLogin ? 'current-password' : 'new-password'}
+            placeholder={isLogin ? '' : 'Ít nhất 8 ký tự'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
@@ -93,7 +119,7 @@ function LoginForm() {
         </label>
 
         {error && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="rounded-xl bg-danger-soft px-4 py-3 text-[14px] text-danger">
             {error}
           </p>
         )}
@@ -101,48 +127,25 @@ function LoginForm() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-full bg-emerald-700 py-3 text-base font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+          className="w-full rounded-2xl bg-leaf py-4 text-[16px] font-semibold text-white transition-colors hover:bg-leaf-deep disabled:opacity-60"
         >
-          {busy ? 'Đang xử lý…' : isLogin ? 'Đăng nhập' : 'Đăng ký & đăng nhập'}
+          {busy ? 'Đang xử lý…' : isLogin ? 'Đăng nhập' : 'Tạo tài khoản và đăng nhập'}
         </button>
       </form>
-
-      <p className="mt-5 text-center text-sm text-stone-600">
-        {isLogin ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}{' '}
-        <button
-          type="button"
-          onClick={() => {
-            setMode(isLogin ? 'register' : 'login');
-            setError(null);
-          }}
-          className="font-semibold text-emerald-800 hover:underline"
-        >
-          {isLogin ? 'Đăng ký' : 'Đăng nhập'}
-        </button>
-      </p>
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen w-full bg-stone-50 text-stone-900">
-      <header className="border-b border-stone-200 bg-white">
-        <nav className="mx-auto flex max-w-md items-center justify-between px-4 py-3">
-          <Link href="/" className="text-lg font-bold text-emerald-800">
-            Maycha
-          </Link>
-          <Link href="/" className="text-sm font-medium text-stone-600 hover:text-emerald-800">
-            Menu
-          </Link>
-        </nav>
-      </header>
-      <main className="mx-auto max-w-md px-4 py-10">
+    <>
+      <SiteHeader />
+      <main className="mx-auto w-full max-w-md flex-1 px-4 py-10 sm:py-16">
         {/* useSearchParams cần Suspense khi build production */}
         <Suspense fallback={null}>
           <LoginForm />
         </Suspense>
       </main>
-    </div>
+    </>
   );
 }
