@@ -11,7 +11,7 @@ import {
   type Order,
   type OrderStatus,
 } from '../../../lib/api';
-import { describeItem, formatDateTime, formatVnd } from '../../../lib/format';
+import { describeItem, formatDateTime, formatVnd, STATUS_META } from '../../../lib/format';
 import { StatusBadge } from '../../../components/StatusBadge';
 import {
   buttonStyles,
@@ -24,66 +24,99 @@ import {
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLLS = 20;
 
-const HEADLINES: Partial<
-  Record<
-    OrderStatus,
-    { icon: string; title: string; text: string; tone: string }
-  >
-> = {
+type Icon = 'check' | 'alert' | 'clock' | 'x' | 'cup' | 'bell' | 'star';
+type Headline = { title: string; text: string; tone: string; icon: Icon };
+
+const HEADLINES: Partial<Record<OrderStatus, Headline>> = {
   PAID: {
-    icon: '✓',
-    title: 'Đặt hàng thành công!',
-    text: 'Quán đã nhận thanh toán. Đồ uống của bạn sẽ được pha chế ngay.',
-    tone: 'bg-emerald-100 text-emerald-700',
+    icon: 'check',
+    title: 'Đặt hàng thành công',
+    text: 'Quán đã nhận thanh toán và bắt đầu pha. Đọc mã đơn này tại quầy để nhận đồ uống.',
+    tone: 'bg-leaf text-white',
   },
   PREPARING: {
-    icon: '🍵',
+    icon: 'cup',
     title: 'Đang pha chế đồ uống',
     text: 'Barista đang chuẩn bị đồ uống theo yêu cầu của bạn.',
-    tone: 'bg-sky-100 text-sky-700',
+    tone: 'bg-sky-700 text-white',
   },
   READY: {
-    icon: '🔔',
-    title: 'Đồ uống đã sẵn sàng!',
-    text: 'Mời bạn tới quầy nhận nước thơm ngon.',
-    tone: 'bg-indigo-100 text-indigo-700',
+    icon: 'bell',
+    title: 'Đồ uống đã sẵn sàng',
+    text: 'Mời bạn tới quầy, đọc mã đơn để nhận đồ uống.',
+    tone: 'bg-sugar text-white',
   },
   COMPLETED: {
-    icon: '★',
+    icon: 'star',
     title: 'Đơn hàng hoàn thành',
-    text: 'Cảm ơn bạn đã ghé thăm và thưởng thức đồ uống Maycha!',
-    tone: 'bg-emerald-100 text-emerald-800',
+    text: 'Cảm ơn bạn đã ghé Maycha. Hẹn gặp lại!',
+    tone: 'bg-leaf text-white',
   },
   PAYMENT_FAILED: {
-    icon: '!',
-    title: 'Thanh toán thất bại',
-    text: 'Giao dịch không thành công, bạn chưa bị trừ tiền. Vui lòng thử lại.',
-    tone: 'bg-red-100 text-red-700',
+    icon: 'alert',
+    title: 'Thanh toán chưa thành công',
+    text: 'Giao dịch bị từ chối và bạn chưa bị trừ tiền. Giỏ hàng vẫn được giữ, bạn có thể thanh toán lại.',
+    tone: 'bg-danger text-white',
   },
   PENDING: {
-    icon: '…',
-    title: 'Đang chờ thanh toán',
-    text: 'Đang xác nhận với cổng thanh toán, trang sẽ tự cập nhật.',
-    tone: 'bg-amber-100 text-amber-700',
+    icon: 'clock',
+    title: 'Đang chờ xác nhận thanh toán',
+    text: 'Cổng thanh toán đang xử lý. Trang này tự cập nhật, bạn không cần tải lại.',
+    tone: 'bg-sugar text-white',
   },
   CANCELLED: {
-    icon: '×',
-    title: 'Đơn đã bị hủy',
-    text: 'Đơn hàng này không còn hiệu lực.',
-    tone: 'bg-stone-200 text-stone-600',
+    icon: 'x',
+    title: 'Đơn đã bị huỷ',
+    text: 'Đơn này không còn hiệu lực.',
+    tone: 'bg-muted text-white',
   },
 };
 
-const DEFAULT_HEADLINE = {
-  icon: '☕',
+const DEFAULT_HEADLINE: Headline = {
+  icon: 'cup',
   title: 'Chi tiết đơn hàng',
   text: 'Theo dõi trạng thái đơn của bạn bên dưới.',
-  tone: 'bg-sky-100 text-sky-700',
+  tone: 'bg-leaf text-white',
 };
+
+/** Các bước chuyển hợp lệ của Order State Machine (Task 10.1). */
+const TRANSITIONS: Partial<Record<OrderStatus, { to: OrderStatus; label: string; danger?: boolean }[]>> = {
+  PENDING: [
+    { to: 'PAID', label: 'Xác nhận đã thanh toán' },
+    { to: 'PAYMENT_FAILED', label: 'Đánh dấu thanh toán lỗi', danger: true },
+    { to: 'CANCELLED', label: 'Huỷ đơn', danger: true },
+  ],
+  PAID: [
+    { to: 'PREPARING', label: 'Bắt đầu pha chế' },
+    { to: 'CANCELLED', label: 'Huỷ đơn', danger: true },
+  ],
+  PREPARING: [{ to: 'READY', label: 'Pha xong, gọi khách' }],
+  READY: [{ to: 'COMPLETED', label: 'Đã giao cho khách' }],
+  PAYMENT_FAILED: [
+    { to: 'PAID', label: 'Thanh toán lại thành công' },
+    { to: 'CANCELLED', label: 'Huỷ đơn', danger: true },
+  ],
+};
+
+function HeadlineIcon({ icon }: { icon: Icon }) {
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden="true" {...common}>
+      {icon === 'check' && <path d="M5 12.5 10 17.5 19 7" />}
+      {icon === 'alert' && <path d="M12 6v7M12 17.5v.5" />}
+      {icon === 'clock' && <><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></>}
+      {icon === 'x' && <path d="M7 7l10 10M17 7 7 17" />}
+      {icon === 'cup' && <path d="M6 8h12l-1.5 11a2 2 0 0 1-2 1.7h-5a2 2 0 0 1-2-1.7L6 8ZM9 8V5h6v3" />}
+      {icon === 'bell' && <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16ZM10 20.5h4" />}
+      {icon === 'star' && <path d="m12 4 2.4 5 5.4.6-4 3.7 1.1 5.3L12 16l-4.9 2.6 1.1-5.3-4-3.7 5.4-.6L12 4Z" />}
+    </svg>
+  );
+}
 
 /**
  * Màn hình Xác nhận đơn – gọi GET /orders/:id (cần JWT).
  * Task 8: sau khi POST /payments xong, chuyển hướng tới `/orders/<id>`.
+ * Task 10: điểm loyalty, voucher, bảng chuyển trạng thái (State Machine).
  */
 export default function OrderConfirmationPage() {
   const params = useParams<{ id: string }>();
@@ -97,7 +130,7 @@ export default function OrderConfirmationPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Tải đơn và điểm tích lũy
+  // Tải đơn và điểm tích luỹ (lần đầu, khi đổi id, khi bấm thử lại)
   useEffect(() => {
     let cancelled = false;
     fetchOrder(id).then((res) => {
@@ -142,12 +175,12 @@ export default function OrderConfirmationPage() {
 
     if (res.ok) {
       setResult({ ok: true, data: res.data });
-      setActionSuccess(`Đã chuyển trạng thái đơn sang "${targetStatus}" thành công!`);
+      setActionSuccess(`Đã chuyển đơn sang "${STATUS_META[targetStatus]?.label ?? targetStatus}".`);
       fetchLoyaltyPoints().then((r) => {
         if (r.ok) setLoyaltyPoints(r.data.loyaltyPoints);
       });
     } else {
-      setActionError(`[Backend assertTransition] ${res.message}`);
+      setActionError(`Không chuyển được trạng thái: ${res.message}`);
     }
   };
 
@@ -177,7 +210,7 @@ export default function OrderConfirmationPage() {
         onRetry={notFound ? undefined : reload}
       >
         <Link href="/orders" className={buttonStyles.secondaryBtn}>
-          Xem lịch sử đơn
+          Xem đơn của tôi
         </Link>
       </ErrorCard>
     );
@@ -185,188 +218,146 @@ export default function OrderConfirmationPage() {
 
   const order = result.data;
   const headline = HEADLINES[order.status] ?? DEFAULT_HEADLINE;
+  const failed = order.status === 'PAYMENT_FAILED';
+  const voided = failed || order.status === 'CANCELLED';
+  const hasVoucher = Boolean(order.voucherCode && order.discountAmount && order.discountAmount > 0);
+  const transitions = TRANSITIONS[order.status] ?? [];
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <header className="border-b border-stone-100 p-6 text-center">
-        <div
-          className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold ${headline.tone}`}
-          aria-hidden="true"
+    <>
+      <div className="mb-8 flex items-start gap-4">
+        <span
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${headline.tone} ${
+            isPending ? 'animate-pulse' : ''
+          }`}
         >
-          {headline.icon}
+          <HeadlineIcon icon={headline.icon} />
+        </span>
+        <div>
+          <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-[-0.02em] sm:text-[36px]">
+            {headline.title}
+          </h1>
+          <p className="mt-2 max-w-prose text-[16px] leading-relaxed text-muted">{headline.text}</p>
         </div>
-        <h1 className="mt-4 text-2xl font-bold">{headline.title}</h1>
-        <p className="mt-1 text-sm text-stone-600">{headline.text}</p>
+      </div>
 
-        <dl className="mt-6 grid grid-cols-2 gap-3 text-left">
-          <div className="rounded-xl bg-stone-50 p-3">
-            <dt className="text-xs uppercase tracking-wide text-stone-500">
-              Mã đơn
-            </dt>
-            <dd className="mt-1 text-xl font-bold tabular-nums">
-              {order.code}
-            </dd>
+      {/* Hoá đơn */}
+      <article className="receipt-edge bg-paper pb-10">
+        <header className="border-b-2 border-dashed border-line px-6 pb-6 pt-8 text-center sm:px-10">
+          <p className="text-[14px] text-muted">Mã đơn</p>
+          <p
+            className={`mt-1 font-display text-[72px] font-extrabold leading-none tracking-[-0.04em] tabular-nums sm:text-[88px] ${
+              voided ? 'text-muted line-through decoration-4' : 'text-leaf'
+            }`}
+          >
+            {order.code}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-[14px] text-muted">
+            <StatusBadge status={order.status} />
+            <span>{formatDateTime(order.createdAt)}</span>
           </div>
-          <div className="rounded-xl bg-stone-50 p-3">
-            <dt className="text-xs uppercase tracking-wide text-stone-500">
-              Trạng thái
-            </dt>
-            <dd className="mt-1.5">
-              <StatusBadge status={order.status} />
-            </dd>
-          </div>
-        </dl>
+        </header>
 
-        {loyaltyPoints !== null && (
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-emerald-50 px-4 py-2.5 text-xs text-emerald-800">
-            <span className="font-semibold">⭐ Điểm tích lũy Loyalty:</span>
-            <span className="font-bold text-sm">{loyaltyPoints} điểm</span>
-          </div>
-        )}
+        <section className="px-6 pt-6 sm:px-10">
+          <h2 className="sr-only">Món đã đặt</h2>
+          <ul className="space-y-4">
+            {order.items.map((item) => (
+              <li key={item.id} className="flex justify-between gap-4 text-[15px]">
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    <span className="tabular-nums">{item.qty}×</span> {item.productName}
+                  </p>
+                  <p className="text-[13px] text-muted">{describeItem(item)}</p>
+                </div>
+                <span className="shrink-0 tabular-nums">{formatVnd(item.lineTotal)}</span>
+              </li>
+            ))}
+          </ul>
 
-        <p className="mt-3 text-xs text-stone-500">
-          Đặt lúc {formatDateTime(order.createdAt)}
-        </p>
-      </header>
-
-      <section className="p-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">
-          Món đã đặt ({order.itemCount})
-        </h2>
-        <ul className="mt-3 divide-y divide-stone-100">
-          {order.items.map((item) => (
-            <li key={item.id} className="flex justify-between gap-4 py-3">
-              <div className="min-w-0">
-                <p className="font-medium">
-                  {item.qty}× {item.productName}
-                </p>
-                <p className="text-xs text-stone-500">{describeItem(item)}</p>
-              </div>
-              <span className="shrink-0 tabular-nums">
-                {formatVnd(item.lineTotal)}
+          <div className="mt-6 space-y-2 border-t-2 border-dashed border-line pt-5 text-[15px]">
+            {hasVoucher && (
+              <>
+                <div className="flex justify-between text-muted">
+                  <span>Tạm tính</span>
+                  <span className="tabular-nums">{formatVnd(order.subtotal ?? order.total)}</span>
+                </div>
+                <div className="flex justify-between font-medium text-leaf">
+                  <span>Mã giảm giá {order.voucherCode}</span>
+                  <span className="tabular-nums">−{formatVnd(order.discountAmount ?? 0)}</span>
+                </div>
+              </>
+            )}
+            <div className="flex items-baseline justify-between pt-1">
+              <span className="font-semibold">
+                {hasVoucher ? 'Tổng thanh toán' : 'Tổng cộng'}{' '}
+                <span className="font-normal text-muted">({order.itemCount} ly)</span>
               </span>
-            </li>
-          ))}
-        </ul>
-
-        {/* Hiển thị Voucher nếu có (Task 10.4) */}
-        {order.voucherCode && order.discountAmount && order.discountAmount > 0 ? (
-          <div className="mt-4 space-y-1.5 border-t border-stone-200 pt-3 text-sm">
-            <div className="flex justify-between text-stone-600">
-              <span>Tạm tính</span>
-              <span>{formatVnd(order.subtotal ?? order.total)}</span>
-            </div>
-            <div className="flex justify-between font-medium text-emerald-700">
-              <span>🎟️ Mã giảm giá ({order.voucherCode})</span>
-              <span>-{formatVnd(order.discountAmount)}</span>
-            </div>
-            <div className="flex justify-between border-t border-stone-100 pt-2 text-base font-bold">
-              <span>Tổng thanh toán</span>
-              <span className="tabular-nums">{formatVnd(order.total)}</span>
+              <span className="font-display text-[28px] font-extrabold tabular-nums">{formatVnd(order.total)}</span>
             </div>
           </div>
-        ) : (
-          <div className="mt-2 flex justify-between border-t border-stone-200 pt-4 text-base font-bold">
-            <span>Tổng cộng</span>
-            <span className="tabular-nums">{formatVnd(order.total)}</span>
-          </div>
-        )}
-      </section>
 
+          {loyaltyPoints !== null && (
+            <div className="mt-5 flex items-center justify-between rounded-2xl bg-sugar-soft px-4 py-3 text-[14px]">
+              <span className="font-medium text-sugar">Điểm tích luỹ của bạn</span>
+              <span className="font-display text-[20px] font-bold tabular-nums text-sugar">
+                {loyaltyPoints} điểm
+              </span>
+            </div>
+          )}
+        </section>
+      </article>
 
-      <section className="border-t border-stone-200 bg-stone-50/80 p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-900">
-            Bảng điều khiển State Machine
-          </h3>
-          <span className="rounded-full bg-stone-200 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
-            {order.status}
-          </span>
+      <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
+        <Link href="/orders" className={buttonStyles.secondaryBtn}>
+          Xem đơn của tôi
+        </Link>
+        <Link href={failed ? '/?view=checkout' : '/'} className={buttonStyles.primaryBtn}>
+          {failed ? 'Thanh toán lại' : 'Đặt thêm món'}
+        </Link>
+      </div>
+
+      {/* Bảng chuyển trạng thái – dùng khi demo Task 10.1 (Order State Machine) */}
+      <section className="mt-12 rounded-3xl border border-dashed border-line p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-[15px] font-semibold">Chuyển trạng thái đơn (demo State Machine)</h2>
+          <StatusBadge status={order.status} />
         </div>
+        <p className="mt-1 text-[13px] text-muted">
+          Dành cho quầy pha chế. Backend chỉ cho phép các bước chuyển hợp lệ.
+        </p>
 
         {actionSuccess && (
-          <div className="mb-3 rounded-lg bg-emerald-100 p-2.5 text-xs text-emerald-800 font-medium">
-            ✅ {actionSuccess}
-          </div>
+          <p role="status" className="mt-4 rounded-xl bg-matcha px-4 py-2.5 text-[14px] font-medium text-leaf-deep">
+            {actionSuccess}
+          </p>
         )}
         {actionError && (
-          <div className="mb-3 rounded-lg bg-red-100 p-2.5 text-xs text-red-800 font-medium">
-            ❌ {actionError}
-          </div>
+          <p role="alert" className="mt-4 rounded-xl bg-danger-soft px-4 py-2.5 text-[14px] text-danger">
+            {actionError}
+          </p>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {order.status === 'PENDING' && (
-            <>
-              <button disabled={isUpdating} onClick={() => handleStatusChange('PAID')}
-                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50">
-                ✓ Thanh toán (→ PAID)
-              </button>
-              <button disabled={isUpdating} onClick={() => handleStatusChange('PAYMENT_FAILED')}
-                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50">
-                ✗ Lỗi thanh toán (→ PAYMENT_FAILED)
-              </button>
-              <button disabled={isUpdating} onClick={() => handleStatusChange('CANCELLED')}
-                className="rounded-lg bg-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-400 disabled:opacity-50">
-                Hủy đơn (→ CANCELLED)
-              </button>
-            </>
-          )}
-
-          {order.status === 'PAID' && (
-            <>
-              <button disabled={isUpdating} onClick={() => handleStatusChange('PREPARING')}
-                className="rounded-lg bg-sky-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-sky-800 disabled:opacity-50">
-                🍵 Pha chế (→ PREPARING)
-              </button>
-              <button disabled={isUpdating} onClick={() => handleStatusChange('CANCELLED')}
-                className="rounded-lg bg-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-400 disabled:opacity-50">
-                Hủy đơn (→ CANCELLED)
-              </button>
-            </>
-          )}
-
-          {order.status === 'PREPARING' && (
-            <button disabled={isUpdating} onClick={() => handleStatusChange('READY')}
-              className="rounded-lg bg-indigo-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-800 disabled:opacity-50">
-              🔔 Pha xong (→ READY)
+        <div className="mt-4 flex flex-wrap gap-2">
+          {transitions.map(({ to, label, danger }) => (
+            <button
+              key={to}
+              type="button"
+              disabled={isUpdating}
+              onClick={() => handleStatusChange(to)}
+              className={`rounded-full px-4 py-2 text-[14px] font-semibold transition-colors disabled:opacity-50 ${
+                danger
+                  ? 'border border-line bg-paper text-danger hover:bg-danger-soft'
+                  : 'bg-leaf text-white hover:bg-leaf-deep'
+              }`}
+            >
+              {label}
             </button>
-          )}
-
-          {order.status === 'READY' && (
-            <button disabled={isUpdating} onClick={() => handleStatusChange('COMPLETED')}
-              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50">
-              ★ Giao khách (→ COMPLETED)
-            </button>
-          )}
-
-          {order.status === 'PAYMENT_FAILED' && (
-            <>
-              <button disabled={isUpdating} onClick={() => handleStatusChange('PAID')}
-                className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50">
-                Thanh toán lại (→ PAID)
-              </button>
-              <button disabled={isUpdating} onClick={() => handleStatusChange('CANCELLED')}
-                className="rounded-lg bg-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-400 disabled:opacity-50">
-                Hủy đơn (→ CANCELLED)
-              </button>
-            </>
-          )}
-
-          {(order.status === 'COMPLETED' || order.status === 'CANCELLED') && (
-            <p className="text-xs text-stone-500 italic">Đơn ở trạng thái kết thúc – không thể chuyển tiếp.</p>
+          ))}
+          {transitions.length === 0 && (
+            <p className="text-[14px] text-muted">Đơn đã ở trạng thái kết thúc, không thể chuyển tiếp.</p>
           )}
         </div>
       </section>
-
-      <footer className="flex flex-wrap justify-center gap-3 border-t border-stone-100 bg-stone-50 p-4">
-        <Link href="/orders" className={buttonStyles.secondaryBtn}>
-          Xem lịch sử đơn
-        </Link>
-        <Link href="/" className={buttonStyles.primaryBtn}>
-          {order.status === 'PAYMENT_FAILED' ? 'Đặt lại' : 'Tiếp tục đặt món'}
-        </Link>
-      </footer>
-    </article>
+    </>
   );
 }

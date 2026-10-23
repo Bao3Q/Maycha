@@ -6,18 +6,17 @@ import { useState, type ReactNode } from 'react';
 import { createDemoSession, DEMO_ENABLED } from '../lib/api';
 import { setToken } from '../lib/auth';
 
-const card =
-  'rounded-2xl border border-stone-200 bg-white p-6 text-center shadow-sm';
+const card = 'rounded-3xl border border-line bg-paper p-8 text-center';
 const primaryBtn =
-  'inline-flex items-center justify-center rounded-full bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-full bg-leaf px-6 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-leaf-deep disabled:opacity-60';
 const secondaryBtn =
-  'inline-flex items-center justify-center rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50';
+  'inline-flex items-center justify-center rounded-full border border-line bg-paper px-6 py-3 text-[15px] font-semibold text-ink transition-colors hover:border-muted/50 hover:bg-sage disabled:opacity-60';
 
 export function LoadingCard({ label }: { label: string }) {
   return (
     <div className={card} role="status" aria-live="polite">
-      <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-stone-300 border-t-emerald-700" />
-      <p className="text-sm text-stone-600">{label}</p>
+      <div className="mx-auto mb-4 h-7 w-7 animate-spin rounded-full border-[3px] border-line border-t-leaf" />
+      <p className="text-[15px] text-muted">{label}</p>
     </div>
   );
 }
@@ -35,9 +34,9 @@ export function ErrorCard({
 }) {
   return (
     <div className={card} role="alert">
-      <h2 className="text-lg font-semibold text-stone-900">{title}</h2>
-      <p className="mt-1 text-sm text-stone-600">{message}</p>
-      <div className="mt-5 flex flex-wrap justify-center gap-3">
+      <h2 className="font-display text-[24px] font-bold">{title}</h2>
+      <p className="mx-auto mt-2 max-w-md text-[15px] text-muted">{message}</p>
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
         {onRetry && (
           <button type="button" className={primaryBtn} onClick={onRetry}>
             Thử lại
@@ -80,9 +79,9 @@ export function LoginRequiredCard({
 
   return (
     <div className={card}>
-      <h2 className="text-lg font-semibold text-stone-900">Cần đăng nhập</h2>
-      <p className="mt-1 text-sm text-stone-600">{message}</p>
-      <div className="mt-5 flex flex-wrap justify-center gap-3">
+      <h2 className="font-display text-[24px] font-bold">Đăng nhập để tiếp tục</h2>
+      <p className="mx-auto mt-2 max-w-md text-[15px] text-muted">{message}</p>
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Link
           href={`/login?next=${encodeURIComponent(pathname || '/orders')}`}
           className={primaryBtn}
@@ -100,7 +99,7 @@ export function LoginRequiredCard({
           </button>
         )}
       </div>
-      {demoError && <p className="mt-3 text-sm text-red-700">{demoError}</p>}
+      {demoError && <p className="mt-4 text-[14px] text-danger">{demoError}</p>}
     </div>
   );
 }
