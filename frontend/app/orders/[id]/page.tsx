@@ -22,44 +22,54 @@ import {
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLLS = 20;
 
-const HEADLINES: Partial<
-  Record<
-    OrderStatus,
-    { icon: string; title: string; text: string; tone: string }
-  >
-> = {
+type Headline = { title: string; text: string; tone: string; icon: 'check' | 'alert' | 'clock' | 'x' | 'cup' };
+
+const HEADLINES: Partial<Record<OrderStatus, Headline>> = {
   PAID: {
-    icon: '✓',
-    title: 'Đặt hàng thành công!',
-    text: 'Quán đã nhận thanh toán. Đồ uống của bạn sẽ được pha chế ngay.',
-    tone: 'bg-emerald-100 text-emerald-700',
+    icon: 'check',
+    title: 'Đặt hàng thành công',
+    text: 'Quán đã nhận thanh toán và bắt đầu pha. Đọc mã đơn này tại quầy để nhận đồ uống.',
+    tone: 'bg-leaf text-white',
   },
   PAYMENT_FAILED: {
-    icon: '!',
-    title: 'Thanh toán thất bại',
-    text: 'Giao dịch không thành công, bạn chưa bị trừ tiền. Vui lòng thử lại.',
-    tone: 'bg-red-100 text-red-700',
+    icon: 'alert',
+    title: 'Thanh toán chưa thành công',
+    text: 'Giao dịch bị từ chối và bạn chưa bị trừ tiền. Giỏ hàng vẫn được giữ, bạn có thể thanh toán lại.',
+    tone: 'bg-danger text-white',
   },
   PENDING: {
-    icon: '…',
-    title: 'Đang chờ thanh toán',
-    text: 'Đang xác nhận với cổng thanh toán, trang sẽ tự cập nhật.',
-    tone: 'bg-amber-100 text-amber-700',
+    icon: 'clock',
+    title: 'Đang chờ xác nhận thanh toán',
+    text: 'Cổng thanh toán đang xử lý. Trang này tự cập nhật, bạn không cần tải lại.',
+    tone: 'bg-sugar text-white',
   },
   CANCELLED: {
-    icon: '×',
-    title: 'Đơn đã bị hủy',
-    text: 'Đơn hàng này không còn hiệu lực.',
-    tone: 'bg-stone-200 text-stone-600',
+    icon: 'x',
+    title: 'Đơn đã bị huỷ',
+    text: 'Đơn này không còn hiệu lực.',
+    tone: 'bg-muted text-white',
   },
 };
 
-const DEFAULT_HEADLINE = {
-  icon: '☕',
+const DEFAULT_HEADLINE: Headline = {
+  icon: 'cup',
   title: 'Chi tiết đơn hàng',
   text: 'Theo dõi trạng thái đơn của bạn bên dưới.',
-  tone: 'bg-sky-100 text-sky-700',
+  tone: 'bg-leaf text-white',
 };
+
+function HeadlineIcon({ icon }: { icon: Headline['icon'] }) {
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" aria-hidden="true" {...common}>
+      {icon === 'check' && <path d="M5 12.5 10 17.5 19 7" />}
+      {icon === 'alert' && <path d="M12 6v7M12 17.5v.5" />}
+      {icon === 'clock' && <><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></>}
+      {icon === 'x' && <path d="M7 7l10 10M17 7 7 17" />}
+      {icon === 'cup' && <path d="M6 8h12l-1.5 11a2 2 0 0 1-2 1.7h-5a2 2 0 0 1-2-1.7L6 8ZM9 8V5h6v3" />}
+    </svg>
+  );
+}
 
 /**
  * Màn hình Xác nhận đơn – gọi GET /orders/:id (cần JWT).
@@ -129,7 +139,7 @@ export default function OrderConfirmationPage() {
         onRetry={notFound ? undefined : reload}
       >
         <Link href="/orders" className={buttonStyles.secondaryBtn}>
-          Xem lịch sử đơn
+          Xem đơn của tôi
         </Link>
       </ErrorCard>
     );
@@ -137,75 +147,75 @@ export default function OrderConfirmationPage() {
 
   const order = result.data;
   const headline = HEADLINES[order.status] ?? DEFAULT_HEADLINE;
+  const failed = order.status === 'PAYMENT_FAILED';
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <header className="border-b border-stone-100 p-6 text-center">
-        <div
-          className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold ${headline.tone}`}
-          aria-hidden="true"
+    <>
+      <div className="mb-8 flex items-start gap-4">
+        <span
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${headline.tone} ${
+            isPending ? 'animate-pulse' : ''
+          }`}
         >
-          {headline.icon}
+          <HeadlineIcon icon={headline.icon} />
+        </span>
+        <div>
+          <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-[-0.02em] sm:text-[36px]">
+            {headline.title}
+          </h1>
+          <p className="mt-2 max-w-prose text-[16px] leading-relaxed text-muted">{headline.text}</p>
         </div>
-        <h1 className="mt-4 text-2xl font-bold">{headline.title}</h1>
-        <p className="mt-1 text-sm text-stone-600">{headline.text}</p>
+      </div>
 
-        <dl className="mt-6 grid grid-cols-2 gap-3 text-left">
-          <div className="rounded-xl bg-stone-50 p-3">
-            <dt className="text-xs uppercase tracking-wide text-stone-500">
-              Mã đơn
-            </dt>
-            <dd className="mt-1 text-xl font-bold tabular-nums">
-              {order.code}
-            </dd>
+      {/* Hoá đơn */}
+      <article className="receipt-edge bg-paper pb-10">
+        <header className="border-b-2 border-dashed border-line px-6 pb-6 pt-8 text-center sm:px-10">
+          <p className="text-[14px] text-muted">Mã đơn</p>
+          <p
+            className={`mt-1 font-display text-[72px] font-extrabold leading-none tracking-[-0.04em] tabular-nums sm:text-[88px] ${
+              failed ? 'text-muted line-through decoration-4' : 'text-leaf'
+            }`}
+          >
+            {order.code}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-[14px] text-muted">
+            <StatusBadge status={order.status} />
+            <span>{formatDateTime(order.createdAt)}</span>
           </div>
-          <div className="rounded-xl bg-stone-50 p-3">
-            <dt className="text-xs uppercase tracking-wide text-stone-500">
-              Trạng thái
-            </dt>
-            <dd className="mt-1.5">
-              <StatusBadge status={order.status} />
-            </dd>
+        </header>
+
+        <section className="px-6 pt-6 sm:px-10">
+          <h2 className="sr-only">Món đã đặt</h2>
+          <ul className="space-y-4">
+            {order.items.map((item) => (
+              <li key={item.id} className="flex justify-between gap-4 text-[15px]">
+                <div className="min-w-0">
+                  <p className="font-medium">
+                    <span className="tabular-nums">{item.qty}×</span> {item.productName}
+                  </p>
+                  <p className="text-[13px] text-muted">{describeItem(item)}</p>
+                </div>
+                <span className="shrink-0 tabular-nums">{formatVnd(item.lineTotal)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-6 flex items-baseline justify-between border-t-2 border-dashed border-line pt-5">
+            <span className="font-semibold">
+              Tổng cộng <span className="font-normal text-muted">({order.itemCount} ly)</span>
+            </span>
+            <span className="font-display text-[28px] font-extrabold tabular-nums">{formatVnd(order.total)}</span>
           </div>
-        </dl>
-        <p className="mt-3 text-xs text-stone-500">
-          Đặt lúc {formatDateTime(order.createdAt)}
-        </p>
-      </header>
+        </section>
+      </article>
 
-      <section className="p-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">
-          Món đã đặt ({order.itemCount})
-        </h2>
-        <ul className="mt-3 divide-y divide-stone-100">
-          {order.items.map((item) => (
-            <li key={item.id} className="flex justify-between gap-4 py-3">
-              <div className="min-w-0">
-                <p className="font-medium">
-                  {item.qty}× {item.productName}
-                </p>
-                <p className="text-xs text-stone-500">{describeItem(item)}</p>
-              </div>
-              <span className="shrink-0 tabular-nums">
-                {formatVnd(item.lineTotal)}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-2 flex justify-between border-t border-stone-200 pt-4 text-base font-bold">
-          <span>Tổng cộng</span>
-          <span className="tabular-nums">{formatVnd(order.total)}</span>
-        </div>
-      </section>
-
-      <footer className="flex flex-wrap justify-center gap-3 border-t border-stone-100 bg-stone-50 p-4">
+      <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-center">
         <Link href="/orders" className={buttonStyles.secondaryBtn}>
-          Xem lịch sử đơn
+          Xem đơn của tôi
         </Link>
-        <Link href="/" className={buttonStyles.primaryBtn}>
-          {order.status === 'PAYMENT_FAILED' ? 'Đặt lại' : 'Tiếp tục đặt món'}
+        <Link href={failed ? '/?view=checkout' : '/'} className={buttonStyles.primaryBtn}>
+          {failed ? 'Thanh toán lại' : 'Đặt thêm món'}
         </Link>
-      </footer>
-    </article>
+      </div>
+    </>
   );
 }

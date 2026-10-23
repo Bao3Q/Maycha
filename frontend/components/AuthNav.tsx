@@ -14,31 +14,33 @@ export function useIsLoggedIn(): boolean {
   );
 }
 
-/** Link "Đơn của tôi" + Đăng nhập / Đăng xuất, dùng chung ở mọi trang. */
+/**
+ * Đăng nhập / Đăng xuất (+ "Đơn của tôi" trên mobile, nơi thanh menu chính bị ẩn).
+ */
 export function AuthNav({ className = '' }: { className?: string }) {
   const loggedIn = useIsLoggedIn();
   const pathname = usePathname();
 
+  const linkClass = 'whitespace-nowrap rounded-full px-2 py-2 text-muted transition-colors hover:text-ink sm:px-3';
+
   return (
-    <div className={`flex items-center gap-4 text-sm font-medium ${className}`}>
-      <Link href="/orders" className="hover:text-emerald-800">
-        Đơn của tôi
+    <div className={`flex items-center gap-1 font-medium ${className}`}>
+      <Link href="/orders" className={`${linkClass} sm:hidden`}>
+        Đơn
       </Link>
       {loggedIn ? (
-        <button
-          type="button"
-          onClick={clearToken}
-          className="hover:text-emerald-800"
-        >
+        <button type="button" onClick={clearToken} className={linkClass}>
           Đăng xuất
         </button>
       ) : (
-        <Link
-          href={`/login?next=${encodeURIComponent(pathname || '/')}`}
-          className="hover:text-emerald-800"
-        >
-          Đăng nhập
-        </Link>
+        pathname !== '/login' && (
+          <Link
+            href={`/login?next=${encodeURIComponent(pathname || '/')}`}
+            className={linkClass}
+          >
+            Đăng nhập
+          </Link>
+        )
       )}
     </div>
   );

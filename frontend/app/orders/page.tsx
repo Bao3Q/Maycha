@@ -37,18 +37,18 @@ export default function OrderHistoryPage() {
 
   return (
     <>
-      <div className="mb-6 flex items-end justify-between gap-4">
+      <div className="mb-8 flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Lịch sử đơn hàng</h1>
-          <p className="mt-1 text-sm text-stone-600">
-            Các đơn bạn đã đặt, mới nhất ở trên cùng.
-          </p>
+          <h1 className="font-display text-[40px] font-extrabold leading-none tracking-[-0.03em] sm:text-[48px]">
+            Đơn của tôi
+          </h1>
+          <p className="mt-3 text-[16px] text-muted">Đơn mới nhất ở trên cùng.</p>
         </div>
         {result?.ok && (
           <button
             type="button"
             onClick={reload}
-            className="text-sm font-medium text-emerald-800 hover:underline"
+            className="rounded-full px-3 py-2 text-[15px] font-medium text-leaf transition-colors hover:bg-matcha"
           >
             Làm mới
           </button>
@@ -73,45 +73,41 @@ export default function OrderHistoryPage() {
       )}
 
       {result?.ok && result.data.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center">
-          <p className="font-medium">Bạn chưa có đơn nào.</p>
-          <p className="mt-1 text-sm text-stone-600">
-            Chọn một ly trà sữa hay cà phê để bắt đầu nhé.
+        <div className="rounded-3xl border border-dashed border-line bg-paper p-10 text-center">
+          <p className="font-display text-[22px] font-bold">Bạn chưa đặt đơn nào</p>
+          <p className="mt-2 text-[15px] text-muted">
+            Chọn một ly trà hay cà phê để bắt đầu.
           </p>
-          <Link href="/" className={`${buttonStyles.primaryBtn} mt-5`}>
+          <Link href="/" className={`${buttonStyles.primaryBtn} mt-6`}>
             Xem menu
           </Link>
         </div>
       )}
 
       {result?.ok && result.data.length > 0 && (
-        <ul className="space-y-3">
+        <ul className="divide-y divide-line overflow-hidden rounded-3xl border border-line bg-paper">
           {result.data.map((order) => (
             <li key={order.id}>
               <Link
                 href={`/orders/${order.id}`}
-                className="block rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-emerald-600 hover:shadow focus-visible:outline-2 focus-visible:outline-emerald-700"
+                className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 p-5 transition-colors hover:bg-sage/60 focus-visible:-outline-offset-3 sm:grid-cols-[6rem_1fr_auto] sm:gap-x-6"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold">Đơn {order.code}</p>
-                    <p className="mt-0.5 text-xs text-stone-500">
-                      {formatDateTime(order.createdAt)}
-                    </p>
-                  </div>
+                <span className="font-display text-[26px] font-extrabold tabular-nums tracking-tight text-leaf sm:row-span-2 sm:text-[28px]">
+                  {order.code}
+                </span>
+                <span className="justify-self-end sm:order-last sm:row-span-2 sm:flex sm:flex-col sm:items-end sm:gap-2">
                   <StatusBadge status={order.status} />
-                </div>
-                <p className="mt-3 truncate text-sm text-stone-600">
-                  {order.items
-                    .map((i) => `${i.qty}× ${i.productName}`)
-                    .join(', ')}
-                </p>
-                <div className="mt-3 flex items-center justify-between text-sm">
-                  <span className="text-stone-500">{order.itemCount} món</span>
-                  <span className="font-semibold">
-                    {formatVnd(order.total)}
+                  <span className="hidden font-semibold tabular-nums sm:block">{formatVnd(order.total)}</span>
+                </span>
+                <span className="col-span-2 min-w-0 sm:col-span-1">
+                  <span className="block truncate text-[15px] font-medium">
+                    {order.items.map((i) => `${i.qty}× ${i.productName}`).join(', ')}
                   </span>
-                </div>
+                  <span className="mt-1 flex justify-between gap-3 text-[13px] text-muted">
+                    <span>{formatDateTime(order.createdAt)}</span>
+                    <span className="font-semibold text-ink tabular-nums sm:hidden">{formatVnd(order.total)}</span>
+                  </span>
+                </span>
               </Link>
             </li>
           ))}
