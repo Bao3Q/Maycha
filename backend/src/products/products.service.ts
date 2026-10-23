@@ -16,7 +16,7 @@ export class ProductsService {
       id: '2',
       name: 'Trà Đào Cam Sả',
       price: 39000,
-      imageUrl: 'https://cdn.tgdd.vn/2020/07/CookRecipe/GalleryStep/thanh-pham-273.jpg',
+      imageUrl: 'https://images.unsplash.com/photo-1676693420436-7fa448f054eb?w=500',
       stock: 40,
     },
     {
