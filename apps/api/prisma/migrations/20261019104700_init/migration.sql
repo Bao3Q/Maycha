@@ -25,7 +25,6 @@ CREATE TABLE "Product" (
     "price" INTEGER NOT NULL,
     "imageUrl" TEXT NOT NULL,
     "stock" INTEGER NOT NULL DEFAULT 0,
-    "version" INTEGER NOT NULL DEFAULT 1,
 
     CONSTRAINT "Product_pkey" PRIMARY KEY ("id")
 );

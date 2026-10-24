@@ -5,6 +5,7 @@ import { type ReactNode, Suspense, useCallback, useEffect, useMemo, useState } f
 import {
   API_URL,
   type ApiResult,
+  createSePayCheckout,
   createOrder,
   payOrder,
   type PaymentMethod,
@@ -53,6 +54,7 @@ const productPhotos: Record<string, string> = {
 const paymentMethods: { label: string; hint: string; method: PaymentMethod; icon: "wallet" | "card" }[] = [
   { label: "Ví điện tử", hint: "MoMo, ZaloPay, VNPay", method: "WALLET", icon: "wallet" },
   { label: "Thẻ ngân hàng", hint: "Thẻ ATM nội địa, Visa, Mastercard", method: "CARD", icon: "card" },
+  { label: "SePay QR", hint: "Quét mã và chuyển khoản ngân hàng", method: "SEPAY", icon: "wallet" },
 ];
 
 const newIdempotencyKey = () =>
@@ -266,11 +268,16 @@ function HomePageContent() {
       setPendingOrder({ id: orderId, cartKey });
     }
 
-    const paid = await payOrder(
-      orderId,
-      simulateFailure ? "FAIL" : payment,
-      newIdempotencyKey(),
-    );
+    if (payment === "SEPAY" && !simulateFailure) {
+      const checkout = await createSePayCheckout(orderId);
+      if (!checkout.ok) return failPayment(checkout);
+      setPaying(false);
+      router.push(`/payments/sepay/${orderId}`);
+      return;
+    }
+
+    const mockMethod = simulateFailure || payment === "SEPAY" ? "FAIL" : payment;
+    const paid = await payOrder(orderId, mockMethod, newIdempotencyKey());
     if (!paid.ok) return failPayment(paid);
 
     // Thành công → xóa giỏ. Thất bại (PAYMENT_FAILED) → giữ nguyên giỏ để

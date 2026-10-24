@@ -246,7 +246,8 @@ export function createOrder(
 }
 
 /** WALLET / CARD / MOMO / VNPAY: thành công; FAIL: giả lập cổng thanh toán lỗi (demo). */
-export type PaymentMethod = 'WALLET' | 'CARD' | 'MOMO' | 'VNPAY' | 'FAIL';
+export type PaymentMethod = 'WALLET' | 'CARD' | 'MOMO' | 'VNPAY' | 'SEPAY' | 'FAIL';
+type MockPaymentMethod = Exclude<PaymentMethod, 'SEPAY'>;
 
 export interface PaymentResponse {
   success: boolean;
@@ -261,11 +262,32 @@ export interface PaymentResponse {
 /** POST /payments – thanh toán mock. */
 export function payOrder(
   orderId: number,
-  method: PaymentMethod,
+  method: MockPaymentMethod,
   idempotencyKey: string,
 ): Promise<ApiResult<PaymentResponse>> {
   return request<PaymentResponse>(
     '/payments',
     jsonBody({ orderId, method, idempotencyKey }),
+  );
+}
+
+export interface SePayCheckoutResponse {
+  orderId: number;
+  amount: number;
+  transferDescription: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  qrUrl: string;
+  status: 'PENDING';
+}
+
+/** POST /payments/sepay/checkout – tạo QR thanh toán và phiên chờ webhook. */
+export function createSePayCheckout(
+  orderId: number,
+): Promise<ApiResult<SePayCheckoutResponse>> {
+  return request<SePayCheckoutResponse>(
+    '/payments/sepay/checkout',
+    jsonBody({ orderId }),
   );
 }

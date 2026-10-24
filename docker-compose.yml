@@ -31,6 +31,10 @@ services:
       CORS_ORIGIN: http://localhost:3000,http://127.0.0.1:3000
       # Mặc định tắt. Đặt ENABLE_DEMO_SEED=true trong .env nếu cần POST /dev/demo-session
       ENABLE_DEMO_SEED: ${ENABLE_DEMO_SEED:-false}
+      SEPAY_BANK_CODE: ${SEPAY_BANK_CODE:-}
+      SEPAY_ACCOUNT_NUMBER: ${SEPAY_ACCOUNT_NUMBER:-}
+      SEPAY_ACCOUNT_NAME: ${SEPAY_ACCOUNT_NAME:-}
+      SEPAY_API_KEY: ${SEPAY_API_KEY:-}
     ports:
       - "3001:3001"
     depends_on:
