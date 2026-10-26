@@ -25,9 +25,3 @@
 | **NFR-04** | Triển khai | Đóng gói và chạy qua Docker container. | Must | Lệnh `docker-compose up` khởi chạy thành công; `GET /health` trả về HTTP 200. |
 
 ---
-
-## 3. Sơ đồ Use-Case
-
-![Sơ đồ use-case tổng quát của toàn hệ thống](./image_5ed01c.png)
-
-*Sơ đồ use-case tổng quát của toàn hệ thống.*
