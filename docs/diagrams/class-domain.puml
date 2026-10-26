@@ -1,0 +1,175 @@
+@startuml class-domain
+' BrewLite - Task 2.3 - Domain class diagram
+
+skinparam style strictuml
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam ArrowColor #000000
+skinparam ClassBorderColor #000000
+skinparam ClassBackgroundColor #FFFFFF
+skinparam ClassHeaderBackgroundColor #FFFFFF
+skinparam linetype polyline
+skinparam nodesep 60
+skinparam ranksep 70
+hide circle
+hide empty methods
+
+title CLASS DIAGRAM (DOMAIN) – BrewLite
+
+class User {
+  - id : UUID
+  - fullName : String
+  - email : String
+  - phone : String
+  - passwordHash : String
+  - role : UserRole
+  - loyaltyPoints : Integer
+  - createdAt : DateTime
+  --
+  + register() : void
+  + login() : String
+}
+
+class Product {
+  - id : UUID
+  - name : String
+  - description : String
+  - category : String
+  - price : Decimal
+  - imageUrl : String
+  - stock : Integer
+  - version : Integer
+  - isAvailable : Boolean
+  --
+  + isInStock(qty : Integer) : Boolean
+  + decreaseStock(qty : Integer) : void
+}
+
+class Order {
+  - id : UUID
+  - orderCode : String
+  - status : OrderStatus
+  - subtotal : Decimal
+  - discountAmount : Decimal
+  - totalAmount : Decimal
+  - note : String
+  - createdAt : DateTime
+  - updatedAt : DateTime
+  --
+  + calculateTotal() : Decimal
+  + updateStatus(s : OrderStatus) : void
+}
+
+class OrderItem {
+  - id : UUID
+  - quantity : Integer
+  - size : DrinkSize
+  - toppings : String[]
+  - unitPrice : Decimal
+  - lineTotal : Decimal
+  --
+  + calculateLineTotal() : Decimal
+}
+
+class Payment {
+  - id : UUID
+  - method : PaymentMethod
+  - amount : Decimal
+  - status : PaymentStatus
+  - idempotencyKey : String {unique}
+  - transactionRef : String
+  - failureReason : String
+  - createdAt : DateTime
+  --
+  + markSuccess(ref : String) : void
+  + markFailed(reason : String) : void
+}
+
+class Promotion {
+  - id : UUID
+  - code : String {unique}
+  - type : DiscountType
+  - value : Decimal
+  - minOrderAmount : Decimal
+  - startDate : DateTime
+  - endDate : DateTime
+  - usageLimit : Integer
+  - isActive : Boolean
+  --
+  + isValid(orderAmount : Decimal) : Boolean
+  + calculateDiscount(amount : Decimal) : Decimal
+}
+
+class LoyaltyTransaction {
+  - id : UUID
+  - type : LoyaltyType
+  - points : Integer
+  - description : String
+  - createdAt : DateTime
+}
+
+enum UserRole <<enumeration>> {
+  CUSTOMER
+  STAFF
+  MANAGER
+}
+
+enum OrderStatus <<enumeration>> {
+  PENDING
+  PAID
+  PREPARING
+  READY
+  COMPLETED
+  PAYMENT_FAILED
+  CANCELLED
+}
+
+enum PaymentStatus <<enumeration>> {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod <<enumeration>> {
+  WALLET
+  CARD
+}
+
+enum DrinkSize <<enumeration>> {
+  S
+  M
+  L
+}
+
+enum DiscountType <<enumeration>> {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum LoyaltyType <<enumeration>> {
+  EARN
+  REDEEM
+}
+
+' ===== Quan hệ & multiplicity =====
+User "1" -- "0..*" Order : places >
+Order "1" *-- "1..*" OrderItem : contains >
+OrderItem "0..*" --> "1" Product : refers to >
+Order "1" -- "0..*" Payment : paid by >
+Order "0..*" --> "0..1" Promotion : applies >
+User "1" -- "0..*" LoyaltyTransaction : owns >
+LoyaltyTransaction "0..*" --> "0..1" Order : from >
+
+' ===== Liên kết enum =====
+User ..> UserRole
+Order ..> OrderStatus
+OrderItem ..> DrinkSize
+Payment ..> PaymentStatus
+Payment ..> PaymentMethod
+Promotion ..> DiscountType
+LoyaltyTransaction ..> LoyaltyType
+
+@enduml
