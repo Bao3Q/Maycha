@@ -110,7 +110,7 @@ Dừng server: `Ctrl + C` trong terminal tương ứng.
 | Frontend – Menu, chi tiết, giỏ hàng, thanh toán | ✅ `/` – menu gọi `GET /products`; "Xác nhận trả" gọi `POST /orders` → `POST /payments` rồi chuyển sang `/orders/<id>` |
 | Frontend – đăng nhập / đăng ký | ✅ `/login` – gọi `POST /auth/login`, `/auth/register`, lưu JWT, quay lại trang trước (`?next=`) |
 | Frontend – xác nhận & lịch sử đơn (Task 9) | ✅ `/orders/[id]` (màn hình xác nhận), `/orders` (lịch sử) – gọi API thật kèm JWT |
-| Backend (NestJS) | ✅ `GET /`, `GET /products`, `GET /products/:id` |
+| Backend (NestJS) | ✅ `GET /`, `GET /health`, `GET /products`, `GET /products/:id` |
 | Backend – đăng ký / đăng nhập (Task 7) | ✅ `POST /auth/register`, `POST /auth/login` (bcrypt + JWT); role `CUSTOMER` / `ADMIN` |
 | Backend – tạo đơn (Task 6) & thanh toán mock (Task 8) | ✅ `POST /orders`, `POST /payments` (cần JWT) |
 | Backend – lịch sử & xác nhận đơn (Task 9) | ✅ `GET /orders/me`, `GET /orders/:id` (cần JWT) |
@@ -427,6 +427,8 @@ File `docker-compose.yml` ở thư mục gốc dựng 3 service:
 | `db` | `postgres:16-alpine`, volume `db_data` | `5432` | – (có healthcheck `pg_isready`) |
 | `backend` | `apps/api/Dockerfile` (multi-stage, chạy migration rồi NestJS bằng user `node`) | `3001` | chờ `db` healthy |
 | `frontend` | `apps/web/Dockerfile` (`next build` → `next start`) | `3000` | `backend` |
+
+Kiểm tra API đang hoạt động: `Invoke-RestMethod http://localhost:3001/health` phải trả về `status: ok`. Endpoint này xác nhận tiến trình API đang phản hồi; không kiểm tra kết nối PostgreSQL.
 
 Biến cấu hình (đặt trong `.env` ở thư mục gốc, xem `.env.example`):
 
