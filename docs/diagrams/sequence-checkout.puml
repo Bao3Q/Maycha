@@ -1,0 +1,129 @@
+@startuml sequence-checkout
+' BrewLite - Task 2.2 - Sequence diagram
+' Use-case (Task 1.3): Đặt và thanh toán đơn hàng (Place & pay order)
+' Lifelines: Customer -> Next.js UI -> NestJS API -> Database -> Payment Service
+
+skinparam style strictuml
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam ArrowColor #555555
+skinparam SequenceLifeLineBorderColor #8FB3DE
+skinparam SequenceLifeLineBackgroundColor #FFFFFF
+skinparam ParticipantBorderColor #8FB3DE
+skinparam ParticipantBackgroundColor #FFFFFF
+skinparam ActorBorderColor #555555
+skinparam ActorBackgroundColor #FFFFFF
+skinparam SequenceGroupBorderColor #555555
+skinparam SequenceGroupHeaderFontStyle bold
+skinparam NoteBackgroundColor #FFFDE7
+skinparam NoteBorderColor #BDBDBD
+skinparam BoxPadding 10
+
+title SEQUENCE DIAGRAM – ĐẶT VÀ THANH TOÁN ĐƠN HÀNG (BrewLite)
+
+actor "Customer" as C
+participant "UI: Next.js UI" as UI
+participant "API: NestJS API" as API
+participant "DB: Database\n(PostgreSQL)" as DB
+actor "Payment Service\n(mock)" as PS
+
+
+C -> UI : placeOrder()
+activate C
+activate UI
+UI -> API : POST /orders\n[Authorization: Bearer JWT]\n{items[], promoCode?}
+activate API
+
+API -> API : verifyJWT(token)
+alt JWT không hợp lệ / hết hạn
+  API --> UI : 401 Unauthorized
+  UI --> C : chuyển đến trang đăng nhập
+else JWT hợp lệ
+  API -> API : validate(CreateOrderDto)
+  alt dữ liệu không hợp lệ
+    API --> UI : 400 Bad Request {errors}
+    UI --> C : hiển thị lỗi nhập liệu
+  else dữ liệu hợp lệ
+    API -> DB : BEGIN TRANSACTION
+    activate DB
+    API -> DB : SELECT products (price, stock, version)
+    DB --> API : products
+    opt có promoCode
+      API -> DB : SELECT promotion WHERE code
+      DB --> API : promotion
+    end
+    API -> DB : INSERT order (status = PENDING)
+    API -> DB : INSERT order_items
+    API -> DB : UPDATE products SET stock = stock - qty,\nversion = version + 1\nWHERE id = :id AND version = :v AND stock >= qty
+    DB --> API : số dòng được cập nhật
+    alt 0 dòng (hết hàng / xung đột version)
+      API -> DB : ROLLBACK
+      deactivate DB
+      API --> UI : 409 Conflict (OUT_OF_STOCK)
+      UI --> C : thông báo sản phẩm hết hàng
+    else cập nhật thành công
+      API -> DB : COMMIT
+      activate DB
+      DB --> API : orderId, total
+      deactivate DB
+      API --> UI : 201 Created {orderId, total}
+      deactivate API
+      UI --> C : hiển thị màn hình thanh toán
+    end
+  end
+end
+
+
+C -> UI : pay(method = WALLET | CARD)
+UI -> UI : idemKey = uuid()\n(giữ nguyên khi gửi lại)
+UI -> API : POST /payments\n[Bearer JWT, Idempotency-Key: idemKey]\n{orderId, method}
+activate API
+API -> API : verifyJWT(token)
+API -> API : validate(PaymentDto)
+API -> DB : SELECT payment WHERE idempotency_key = idemKey
+activate DB
+DB --> API : payment | null
+
+alt đã tồn tại payment với idemKey (client gửi lại)
+  API --> UI : 200 OK {kết quả đã lưu}\n(không trừ tiền lần 2)
+else yêu cầu mới
+  API -> DB : INSERT payment (status = PENDING, idempotency_key)
+  API -> PS : charge(orderId, amount, method, idemKey)
+  activate PS
+  alt thanh toán thành công
+    PS --> API : SUCCESS {transactionRef}
+    API -> DB : BEGIN TRANSACTION
+    API -> DB : UPDATE payment SET status = SUCCESS
+    API -> DB : UPDATE order SET status = PAID
+    API -> DB : INSERT loyalty_transaction (EARN, points)
+    API -> DB : COMMIT
+    API --> UI : 200 OK {status: PAID}
+  else thanh toán thất bại
+    PS --> API : FAILED {reason}
+    deactivate PS
+    API -> DB : UPDATE payment SET status = FAILED
+    API -> DB : UPDATE order SET status = PAYMENT_FAILED
+    note right of DB
+      PAYMENT_FAILED: khách có thể
+      thử lại hoặc hủy đơn (CANCELLED);
+      giỏ hàng được giữ nguyên.
+    end note
+    API --> UI : 402 Payment Required {reason}
+  end
+end
+deactivate DB
+deactivate API
+
+
+alt status = PAID
+  UI --> C : "Đặt hàng thành công" + mã đơn,\nchuyển đến màn hình theo dõi đơn
+else thanh toán thất bại
+  UI --> C : "Thanh toán thất bại" + nút Thử lại\n(giữ giỏ hàng, tạo idemKey mới)
+end
+deactivate UI
+deactivate C
+
+@enduml
