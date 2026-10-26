@@ -1,491 +1,281 @@
-# Đồ án CNPM: Maycha (BrewLite)
+# Maycha (BrewLite) – Ứng dụng đặt đồ uống không dùng tiền mặt
 
-- **Đề tài:** Ứng dụng đặt đồ uống không dùng tiền mặt cho quán Maycha theo quy trình Agile Scrum.
-- **Công nghệ:** Next.js (Frontend) + NestJS (Backend) + PostgreSQL / Prisma + Docker Compose.
-- **Phạm vi (10 Task):**
-  - Quản lý danh mục & menu: Trà sữa, cà phê, topping, chọn size.
-  - Giỏ hàng & xác thực tài khoản (JWT).
-  - Đặt hàng & thanh toán không tiền mặt (Mock Momo/VNPAY).
-  - Xử lý nghiệp vụ nâng cao: Máy trạng thái đơn hàng (Order State Machine), idempotency, chống bán vượt tồn kho, tích điểm loyalty.
-- **Kế hoạch triển khai:** Chia làm 3 Sprint (Sprint 1: Menu & Nền tảng; Sprint 2: Giỏ hàng & Tài khoản; Sprint 3: Thanh toán & Bàn giao Docker).
+Bài tập lớn môn **Công nghệ Phần mềm** – Trường Đại học Sài Gòn, Khoa CNTT, HK I năm học 2026–2027.
 
----
+Khách xem menu, chọn size/topping, thêm vào giỏ, đăng nhập, thanh toán không tiền mặt rồi nhận **mã đơn** để lấy nước tại quầy. Dự án làm theo quy trình **Agile Scrum** với 10 task chia vào 3 Sprint.
 
-## 🚀 Chạy web nhanh
-
-> **Điều kiện bắt buộc:** Node.js **≥ 24.15.0** (hoặc ≥ 22.22.3). Kiểm tra bằng `node -v`. Xem [mục 2](#2-yêu-cầu-môi-trường).
-
-### 🐳 Cách nhanh nhất: Docker Compose (cả 3 thành phần)
-
-Chỉ cần cài [Docker Desktop](https://www.docker.com/products/docker-desktop/). Từ thư mục gốc của repo:
-
-```bash
-docker compose up --build        # lần đầu hoặc khi code thay đổi
-docker compose up -d             # chạy nền những lần sau
-docker compose logs -f backend   # xem log backend
-docker compose down              # dừng (thêm -v để xóa luôn dữ liệu DB)
-```
-
-| Service | Địa chỉ | Ghi chú |
-| ------- | ------- | ------- |
-| `frontend` | http://localhost:3000 | Next.js build production |
-| `backend` | http://localhost:3001 | NestJS, đọc `DATABASE_URL`, `JWT_SECRET` từ compose |
-| `db` | `localhost:5432` | PostgreSQL 16, user/pass/db mặc định `maycha` / `maycha_password` / `maycha_db` |
-
-Muốn đổi mật khẩu DB, `JWT_SECRET`…: `cp .env.example .env` ở **thư mục gốc** rồi sửa. Xem chi tiết ở [mục 10](#10-docker-compose--bàn-giao).
-
-### 💻 Chạy thủ công (dev, tự reload)
-
-Mở **2 terminal**, chạy song song, **không tắt** trong lúc dùng web. Mọi lệnh đều chạy từ **thư mục gốc của repo**.
-
-### 🪟 Windows – PowerShell (terminal mặc định của VS Code)
-
-```powershell
-# ── Terminal 1: Backend ──────────────────────────────
-cd apps/api
-Copy-Item .env.example .env        # chỉ lần đầu
-npm install                        # lần đầu, hoặc khi package.json thay đổi
-$env:PORT=3001; npm run start:dev
-```
-
-```powershell
-# ── Terminal 2: Frontend ─────────────────────────────
-cd apps/web
-npm install                        # lần đầu, hoặc khi package.json thay đổi
-npm run dev
-```
-
-### 🍎 macOS / Linux / Git Bash
-
-```bash
-# ── Terminal 1: Backend ──────────────────────────────
-cd apps/api
-cp .env.example .env               # chỉ lần đầu
-npm install                        # lần đầu, hoặc khi package.json thay đổi
-PORT=3001 npm run start:dev
-```
-
-```bash
-# ── Terminal 2: Frontend ─────────────────────────────
-cd apps/web
-npm install                        # lần đầu, hoặc khi package.json thay đổi
-npm run dev
-```
-
-### 🌐 Mở trên trình duyệt
-
-| Thành phần | Địa chỉ | Dấu hiệu chạy đúng |
-| ---------- | ------- | ------------------ |
-| **Frontend** (giao diện) | **http://localhost:3000** | Trang web hiển thị |
-| **Backend** (API) | **http://localhost:3001** | Trả về chữ `Hello World!` |
-
-Dừng server: `Ctrl + C` trong terminal tương ứng.
-
-> ℹ️ Backend tự đọc `apps/api/.env` khi khởi động (dùng `process.loadEnvFile()` có sẵn trong Node, không cần thư viện). Nếu chưa có `.env`, backend mặc định chạy cổng **3001**. Các API cần đăng nhập (vd. `/orders/me`) yêu cầu `JWT_SECRET` – đã có sẵn trong `.env.example`.
+| Thành phần | Công nghệ |
+| ---------- | --------- |
+| Frontend | Next.js 16 (React 19, TypeScript), Tailwind CSS 4 – thư mục `apps/web` |
+| Backend | NestJS 12 (TypeScript), REST, class-validator, JWT HS256 – thư mục `apps/api` |
+| Cơ sở dữ liệu | PostgreSQL 16 + Prisma 7 (migrations trong `apps/api/prisma`) |
+| Thanh toán | Mock `WALLET` / `CARD` / `MOMO` / `VNPAY` / `FAIL` + tích hợp tuỳ chọn **SePay QR** (chuyển khoản thật, xác nhận qua webhook) |
+| DevOps | Docker Compose (3 service), GitHub Actions CI |
 
 ---
 
 ## Mục lục
 
-1. [Trạng thái hiện tại của dự án](#1-trạng-thái-hiện-tại-của-dự-án)
-2. [Yêu cầu môi trường](#2-yêu-cầu-môi-trường)
-3. [Cấu trúc thư mục](#3-cấu-trúc-thư-mục)
-4. [Cài đặt & chạy chi tiết](#4-cài-đặt--chạy-chi-tiết)
-5. [Biến môi trường](#5-biến-môi-trường)
-6. [Kiểm tra sau khi cài](#6-kiểm-tra-sau-khi-cài)
-7. [Danh sách lệnh npm](#7-danh-sách-lệnh-npm)
-8. [Lỗi thường gặp](#8-lỗi-thường-gặp)
-9. [Quy tắc làm việc nhóm](#9-quy-tắc-làm-việc-nhóm)
-10. [Docker Compose & bàn giao](#10-docker-compose--bàn-giao)
-11. [API đơn hàng – Lịch sử & Xác nhận (Task 9)](#11-api-đơn-hàng--lịch-sử--xác-nhận-task-9)
-12. [API đăng ký / đăng nhập – JWT (Task 7)](#12-api-đăng-ký--đăng-nhập--jwt-task-7)
-13. [Nghiệp vụ đặt hàng & thanh toán (Task 10)](#13-nghiệp-vụ-đặt-hàng--thanh-toán-task-10)
+- [Maycha (BrewLite) – Ứng dụng đặt đồ uống không dùng tiền mặt](#maycha-brewlite--ứng-dụng-đặt-đồ-uống-không-dùng-tiền-mặt)
+  - [Mục lục](#mục-lục)
+  - [1. Chạy nhanh bằng Docker Compose](#1-chạy-nhanh-bằng-docker-compose)
+  - [2. Chạy thủ công để phát triển](#2-chạy-thủ-công-để-phát-triển)
+    - [2.1. Yêu cầu môi trường](#21-yêu-cầu-môi-trường)
+    - [2.2. Các bước](#22-các-bước)
+    - [2.3. Kiểm tra nhanh sau khi cài](#23-kiểm-tra-nhanh-sau-khi-cài)
+  - [3. Trạng thái 10 task](#3-trạng-thái-10-task)
+  - [4. Cấu trúc thư mục](#4-cấu-trúc-thư-mục)
+  - [5. Biến môi trường](#5-biến-môi-trường)
+    - [5.1. Docker Compose – file `.env` ở thư mục gốc](#51-docker-compose--file-env-ở-thư-mục-gốc)
+    - [5.2. Backend – `apps/api/.env` (tạo từ `apps/api/.env.example`)](#52-backend--appsapienv-tạo-từ-appsapienvexample)
+    - [5.3. Frontend – `apps/web/.env.local` (không bắt buộc)](#53-frontend--appswebenvlocal-không-bắt-buộc)
+  - [6. Danh sách API](#6-danh-sách-api)
+  - [7. Lịch sử \& xác nhận đơn (Task 9)](#7-lịch-sử--xác-nhận-đơn-task-9)
+    - [7.1. API](#71-api)
+    - [7.2. Giao diện](#72-giao-diện)
+    - [7.3. Tài khoản demo (tuỳ chọn)](#73-tài-khoản-demo-tuỳ-chọn)
+  - [8. Đăng ký / đăng nhập (Task 7)](#8-đăng-ký--đăng-nhập-task-7)
+  - [9. Nghiệp vụ đặt hàng \& thanh toán (Task 8, 10)](#9-nghiệp-vụ-đặt-hàng--thanh-toán-task-8-10)
+    - [9.1. Thanh toán mock – `POST /payments` 🔒](#91-thanh-toán-mock--post-payments-)
+    - [9.2. SePay QR (tuỳ chọn)](#92-sepay-qr-tuỳ-chọn)
+    - [9.3. State machine, tồn kho, voucher, loyalty](#93-state-machine-tồn-kho-voucher-loyalty)
+  - [10. Kịch bản demo end-to-end (Sprint Review)](#10-kịch-bản-demo-end-to-end-sprint-review)
+  - [11. Kiểm thử \& CI](#11-kiểm-thử--ci)
+  - [12. Danh sách lệnh npm](#12-danh-sách-lệnh-npm)
+    - [Backend (`apps/api`)](#backend-appsapi)
+    - [Frontend (`apps/web`)](#frontend-appsweb)
+  - [13. Lỗi thường gặp](#13-lỗi-thường-gặp)
+  - [14. Quy tắc làm việc nhóm](#14-quy-tắc-làm-việc-nhóm)
 
 ---
 
-## 1. Trạng thái hiện tại của dự án
+## 1. Chạy nhanh bằng Docker Compose
 
-| Hạng mục | Trạng thái |
-| -------- | ---------- |
-| Frontend – Menu, chi tiết, giỏ hàng, thanh toán | ✅ `/` – menu gọi `GET /products`; "Xác nhận trả" gọi `POST /orders` → `POST /payments` rồi chuyển sang `/orders/<id>` |
-| Frontend – đăng nhập / đăng ký | ✅ `/login` – gọi `POST /auth/login`, `/auth/register`, lưu JWT, quay lại trang trước (`?next=`) |
-| Frontend – xác nhận & lịch sử đơn (Task 9) | ✅ `/orders/[id]` (màn hình xác nhận), `/orders` (lịch sử) – gọi API thật kèm JWT |
-| Backend (NestJS) | ✅ `GET /`, `GET /health`, `GET /products`, `GET /products/:id` |
-| Backend – đăng ký / đăng nhập (Task 7) | ✅ `POST /auth/register`, `POST /auth/login` (bcrypt + JWT); role `CUSTOMER` / `ADMIN` |
-| Backend – tạo đơn (Task 6) & thanh toán mock (Task 8) | ✅ `POST /orders`, `POST /payments` (cần JWT) |
-| Backend – lịch sử & xác nhận đơn (Task 9) | ✅ `GET /orders/me`, `GET /orders/:id` (cần JWT) |
-| Backend – nghiệp vụ đặt hàng & thanh toán (Task 10) | ✅ State machine, idempotency, tồn kho, voucher và loyalty; ghi dữ liệu qua Prisma/PostgreSQL, các thay đổi đơn và tồn kho dùng transaction |
-| Validate đầu vào | ✅ `ValidationPipe` toàn cục (`src/app.setup.ts`) – dữ liệu sai trả `400` |
-| Đọc file `.env` ở backend | ✅ `process.loadEnvFile()` trong `main.ts` |
-| PostgreSQL / Prisma | ✅ Backend lưu tài khoản, menu/tồn kho, đơn hàng, thanh toán, idempotency và điểm loyalty trong PostgreSQL; migrations tự áp dụng khi backend Docker khởi động |
-| Docker Compose | ✅ `docker-compose.yml` dựng `apps/api` + `apps/web` + PostgreSQL |
-| Dữ liệu demo | ✅ `POST /dev/demo-session` – **mặc định tắt**, bật bằng `ENABLE_DEMO_SEED=true` |
-
-> Khi một hạng mục được hoàn thành, người làm task đó **phải cập nhật bảng này và các mục liên quan** trong cùng Pull Request.
-
----
-
-## 2. Yêu cầu môi trường
-
-| Phần mềm | Phiên bản bắt buộc | Lý do |
-| -------- | ------------------ | ----- |
-| **Node.js** | `^22.22.3` hoặc `^24.15.0` hoặc `>=26` | Ràng buộc `engines` của NestJS 12 (`@nestjs/schematics`, `@angular-devkit/*`). **Bản 24.14 trở xuống KHÔNG đạt.** |
-| **npm** | Đi kèm Node.js (≥ 10) | Dự án dùng `package-lock.json`, **chỉ dùng npm** (không dùng yarn / pnpm / bun để tránh lệch lock file) |
-| **Git** | Bản bất kỳ | Clone và làm việc nhóm |
-
-Phiên bản thư viện chính (theo `package-lock.json`):
-
-| Thành phần | Thư viện | Phiên bản |
-| ---------- | -------- | --------- |
-| Backend | NestJS (`@nestjs/core`) | 12.1.2 |
-| Backend | TypeScript | 6.0.3 |
-| Frontend | Next.js | 16.3.8 |
-| Frontend | React / React DOM | 19.2.8 |
-| Frontend | TypeScript | 5.9.3 |
-| Frontend | Tailwind CSS | 4.x |
-
-Kiểm tra máy:
+Chỉ cần cài [Docker Desktop](https://www.docker.com/products/docker-desktop/). Từ **thư mục gốc** của repo:
 
 ```bash
-node -v      # ví dụ hợp lệ: v24.15.0, v22.22.3
-npm -v
-git --version
+docker compose up --build        # lần đầu, hoặc khi code thay đổi
+docker compose up -d             # những lần sau, chạy nền
+docker compose logs -f backend   # xem log backend
+docker compose down              # dừng, GIỮ dữ liệu
+docker compose down -v           # dừng và XOÁ luôn database (cẩn thận)
 ```
 
-Cài / nâng cấp Node.js:
-- Tải bản **24 LTS mới nhất** tại https://nodejs.org và cài đè bản cũ, **hoặc**
-- Dùng trình quản lý phiên bản: [nvm-windows](https://github.com/coreybutler/nvm-windows) (Windows) / [nvm](https://github.com/nvm-sh/nvm) (macOS, Linux):
-  ```bash
-  nvm install 24
-  nvm use 24
-  ```
+| Service | Địa chỉ | Ghi chú |
+| ------- | ------- | ------- |
+| `frontend` | http://localhost:3000 | Next.js bản production; gọi API qua proxy `/api` của chính nó |
+| `backend` | http://localhost:3001 | NestJS; tự chạy `prisma migrate deploy` trước khi khởi động |
+| `db` | `localhost:5432` | PostgreSQL 16; user / mật khẩu / database mặc định `maycha` / `maycha_password` / `maycha_db` |
+
+Thứ tự khởi động được đảm bảo: `backend` chỉ chạy khi `db` đã **healthy** (healthcheck `pg_isready`), `frontend` chạy sau `backend`. Dữ liệu PostgreSQL nằm trong volume `db_data` nên không mất khi tắt/bật lại container.
+
+Muốn đổi mật khẩu DB, `JWT_SECRET`, bật tài khoản demo hay cấu hình SePay: tạo file `.env` ở **thư mục gốc** (tham khảo `.env.example`, xem [mục 5.1](#51-docker-compose--file-env-ở-thư-mục-gốc)) rồi chạy lại `docker compose up --build`.
+
+> **Trước buổi bàn giao:** đặt `JWT_SECRET` riêng trong `.env` thay vì giá trị mặc định `change_me_in_production`.
 
 ---
 
-## 3. Cấu trúc thư mục theo assignment
+## 2. Chạy thủ công để phát triển
 
-```
-brewlite/
-├── apps/
-│   ├── web/                         # Next.js frontend
-│   └── api/                         # NestJS API và Prisma
-├── docs/
-│   ├── requirements/                # Assignment PDFs
-│   ├── diagrams/                    # Architecture diagrams
-│   ├── architecture/                # Database architecture and legacy notes
-│   ├── traceability-matrix.md
-│   └── deployment.md
-├── tests/
-│   └── api/                         # NestJS end-to-end tests
-├── .github/
-│   └── workflows/                   # CI
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
+### 2.1. Yêu cầu môi trường
 
-Backend và frontend là hai dự án Node độc lập; chạy `npm install` trong `apps/api/` và `apps/web/` tương ứng, không chạy ở thư mục gốc. E2E tests được đặt trong `tests/api/`.
+| Phần mềm | Phiên bản | Ghi chú |
+| -------- | --------- | ------- |
+| **Node.js** | `^22.22.3`, `^24.15.0` hoặc `>=26` | Ràng buộc `engines` của NestJS 12. **24.14 trở xuống không đạt.** Kiểm tra: `node -v` |
+| **npm** | đi kèm Node (≥ 10) | Chỉ dùng npm (dự án dùng `package-lock.json`) |
+| **PostgreSQL** | 16 | Dễ nhất là chạy bằng Docker: `docker compose up -d db` |
+| **Git** | bất kỳ | |
 
-| Thành phần | Cổng | Địa chỉ |
-| ---------- | ---- | ------- |
-| Frontend | `3000` | http://localhost:3000 |
-| Backend | `3001` | http://localhost:3001 |
+### 2.2. Các bước
 
-CI workflow: `.github/workflows/ci.yml`. Hướng dẫn triển khai: [`docs/deployment.md`](docs/deployment.md); sơ đồ kiến trúc: [`docs/diagrams/system-architecture.md`](docs/diagrams/system-architecture.md).
+Mở **2 terminal**, mọi lệnh chạy từ **thư mục gốc** của repo.
 
----
-
-## 4. Cài đặt & chạy chi tiết
-
-### 4.1. Lấy code về
+**Bước 0 – bật database** (nếu chưa có PostgreSQL trên máy):
 
 ```bash
-git clone https://github.com/Bao3Q/Maycha.git
-cd Maycha
-```
-
-### 4.2. Backend
-
-**PostgreSQL phải chạy trước backend.** Nếu dùng Docker cho database nhưng chạy NestJS trực tiếp, chạy từ thư mục gốc repo:
-
-```powershell
 docker compose up -d db
 ```
 
-1. **Vào thư mục:** `cd apps/api`
-2. **Tạo `.env` từ file mẫu** (chỉ lần đầu):
+**Terminal 1 – Backend:**
 
-   | Shell | Lệnh |
-   | ----- | ---- |
-   | PowerShell | `Copy-Item .env.example .env` |
-   | CMD | `copy .env.example .env` |
-   | macOS / Linux / Git Bash | `cp .env.example .env` |
+| Windows PowerShell | macOS / Linux / Git Bash |
+| ------------------ | ------------------------ |
+| `cd apps/api` | `cd apps/api` |
+| `Copy-Item .env.example .env` *(lần đầu)* | `cp .env.example .env` *(lần đầu)* |
+| `npm install` | `npm install` |
+| `npm run prisma:generate` | `npm run prisma:generate` |
+| `npm run prisma:deploy` | `npm run prisma:deploy` |
+| `$env:PORT=3001; npm run start:dev` | `PORT=3001 npm run start:dev` |
 
-3. **Cài thư viện:** `npm install`
-   Thành công khi dòng cuối có `added N packages` hoặc `up to date, audited N packages`. Các dòng `npm warn` **không** phải lỗi.
-4. **Sinh Prisma Client và áp dụng migration:** `npm run prisma:generate`, sau đó `npm run prisma:deploy`.
-5. **Chạy chế độ phát triển** (tự khởi động lại khi sửa code):
+CMD: `copy .env.example .env` và `set "PORT=3001" && npm run start:dev` (phải có dấu ngoặc kép).
 
-   | Shell | Lệnh |
-   | ----- | ---- |
-   | PowerShell | `$env:PORT=3001; npm run start:dev` |
-   | CMD | `set "PORT=3001" && npm run start:dev` |
-   | macOS / Linux / Git Bash | `PORT=3001 npm run start:dev` |
+Chạy đúng khi terminal in `Nest application successfully started` và http://localhost:3001 hiện `Hello World!`. Backend tự đọc `apps/api/.env` khi khởi động (`process.loadEnvFile()`), biến đã có sẵn trong môi trường không bị ghi đè.
 
-   > Ở CMD phải có dấu ngoặc kép `"PORT=3001"`. Nếu viết `set PORT=3001 && ...`, CMD sẽ gán cả dấu cách thừa vào giá trị.
+**Terminal 2 – Frontend:**
 
-6. **Kiểm tra:** terminal in `Nest application successfully started` → mở http://localhost:3001 → thấy `Hello World!`.
+```bash
+cd apps/web
+npm install
+npm run dev
+```
 
-### 4.3. Frontend
+Mở http://localhost:3000. Mặc định frontend gọi API qua proxy cùng origin `/api/*` → `http://localhost:3001` (khai báo trong `apps/web/next.config.ts`), nên **không cần** tạo `.env.local`. Chỉ tạo `apps/web/.env.local` (từ `apps/web/.env.example`) khi muốn trình duyệt gọi thẳng một địa chỉ API khác hoặc bật nút tài khoản demo.
 
-1. **Vào thư mục:** `cd apps/web`
-2. **Cài thư viện:** `npm install`
-3. **Chạy chế độ phát triển:** `npm run dev`
-4. **Kiểm tra:** terminal in `Ready` và `Local: http://localhost:3000` → mở địa chỉ đó.
-   Sửa `apps/web/app/page.tsx` và lưu, trang tự cập nhật.
+> Nếu cổng 3000 đang bận, Next.js tự nhảy sang cổng khác – luôn đọc địa chỉ thực tế in ra trong terminal.
 
-> Nếu cổng 3000 đang bận, Next.js sẽ **tự nhảy sang cổng khác** (3001, 3002…). Luôn đọc địa chỉ thực tế in ra trong terminal.
+### 2.3. Kiểm tra nhanh sau khi cài
 
-### 4.4. Những lần chạy sau
+- [ ] http://localhost:3001 hiển thị `Hello World!`
+- [ ] http://localhost:3001/products trả danh sách món (JSON)
+- [ ] http://localhost:3001/orders/me trả `401` khi chưa đăng nhập
+- [ ] http://localhost:3000 hiển thị menu
+- [ ] http://localhost:3000/orders hiện thẻ "Đăng nhập để tiếp tục" khi chưa đăng nhập
+- [ ] http://localhost:3000/login đăng ký được tài khoản mới
+- [ ] `git status` **không** hiện `.env`, `node_modules/`, `.next/`, `dist/`
 
-Không cần cài lại, chỉ cần:
+---
 
-| Shell | Terminal 1 (Backend) | Terminal 2 (Frontend) |
-| ----- | -------------------- | --------------------- |
-| PowerShell | `cd apps/api; $env:PORT=3001; npm run start:dev` | `cd apps/web; npm run dev` |
-| macOS / Linux / Git Bash | `cd apps/api && PORT=3001 npm run start:dev` | `cd apps/web && npm run dev` |
+## 3. Trạng thái 10 task
 
-Chạy lại `npm install` khi: vừa `git pull` và `package.json` / `package-lock.json` có thay đổi.
+| # | Task | Trạng thái | Hiện thực chính |
+| - | ---- | ---------- | --------------- |
+| 1 | Khởi tạo dự án | ✅ | Monorepo `apps/api` + `apps/web`, README, `.env.example`, CI |
+| 2 | API danh sách sản phẩm | ✅ | `GET /products`, `GET /products/:id` (menu + tồn kho trong PostgreSQL, sản phẩm mẫu được upsert khi backend khởi động) |
+| 3 | Trang Menu | ✅ | `/` – lưới sản phẩm, trạng thái đang tải / rỗng / lỗi |
+| 4 | Chi tiết & tuỳ chọn | ✅ | Chọn size S/M/L, topping, giá tính theo tuỳ chọn |
+| 5 | Giỏ hàng | ✅ | Thêm / sửa số lượng / xoá, tự tính tổng, badge số lượng |
+| 6 | API tạo đơn | ✅ | `POST /orders` – validate, giữ tồn kho, tạo đơn `PENDING` |
+| 7 | Đăng ký / đăng nhập | ✅ | `POST /auth/register`, `POST /auth/login` (bcrypt + JWT), trang `/login` |
+| 8 | Thanh toán không tiền mặt | ✅ | `POST /payments` (mock), SePay QR tuỳ chọn; `PAID` / `PAYMENT_FAILED` |
+| 9 | Xác nhận, lịch sử đơn & bàn giao | ✅ | `GET /orders/me`, `GET /orders/:id`, trang `/orders` và `/orders/[id]`, Docker Compose 3 service, README, test e2e luồng đầy đủ |
+| 10 | Nghiệp vụ backend | ✅ | State machine, thanh toán idempotent, chống bán vượt tồn kho (transaction + điều kiện `stock >= qty`), voucher, điểm loyalty |
+
+> Khi thay đổi cách cài, cách chạy, biến môi trường hay API, người làm **phải cập nhật README** trong cùng Pull Request.
+
+---
+
+## 4. Cấu trúc thư mục
+
+```
+Maycha/
+├── apps/
+│   ├── api/                      # NestJS backend
+│   │   ├── prisma/               # schema.prisma + migrations
+│   │   ├── src/
+│   │   │   ├── auth/             # Task 7: đăng ký / đăng nhập
+│   │   │   ├── common/           # JwtAuthGuard, @CurrentUser, jwt.util, PrismaService
+│   │   │   ├── dev/              # POST /dev/demo-session (chỉ khi bật cờ)
+│   │   │   ├── orders/           # Task 6, 9, 10: đơn hàng, state machine
+│   │   │   ├── payments/         # Task 8, 10: thanh toán mock, SePay, loyalty
+│   │   │   ├── products/         # Task 2: menu, tồn kho
+│   │   │   ├── app.setup.ts      # ValidationPipe toàn cục (dùng chung cho test)
+│   │   │   └── main.ts           # đọc .env, CORS, lắng nghe cổng
+│   │   └── Dockerfile
+│   └── web/                      # Next.js frontend
+│       ├── app/
+│       │   ├── page.tsx          # Menu → Chi tiết → Giỏ hàng → Thanh toán
+│       │   ├── login/            # Đăng nhập / Đăng ký
+│       │   ├── orders/           # Task 9: /orders (lịch sử), /orders/[id] (xác nhận)
+│       │   └── payments/sepay/   # Màn hình QR SePay
+│       ├── components/           # SiteHeader, StatusBadge, OrderMessages…
+│       ├── lib/                  # api.ts, auth.ts, cart.ts, format.ts
+│       ├── next.config.ts        # proxy /api/* → backend
+│       └── Dockerfile
+├── tests/api/                    # Test e2e của backend
+├── docs/                         # Đề bài, sơ đồ, ma trận truy vết, hướng dẫn triển khai
+├── .github/workflows/ci.yml      # CI
+├── docker-compose.yml
+├── .env.example                  # biến cho Docker Compose
+└── README.md
+```
+
+Backend và frontend là **hai dự án Node độc lập**: chạy `npm install` trong `apps/api` và `apps/web`, không chạy ở thư mục gốc.
+
+Tài liệu thêm: [`docs/deployment.md`](docs/deployment.md), [`docs/diagrams/system-architecture.md`](docs/diagrams/system-architecture.md), [`docs/traceability-matrix.md`](docs/traceability-matrix.md).
 
 ---
 
 ## 5. Biến môi trường
 
-File: `apps/api/.env` (tạo từ `apps/api/.env.example`).
+Quy tắc: **không commit file `.env`** (đã có trong `.gitignore`), chỉ commit `.env.example` với giá trị giả. Thêm biến mới thì bổ sung vào `.env.example` và bảng dưới đây.
 
-| Biến | Giá trị mẫu | Đang được dùng? | Ý nghĩa |
-| ---- | ----------- | --------------- | ------- |
-| `PORT` | `3001` | ✅ | Cổng backend, mặc định `3001` |
-| `DATABASE_URL` | Chuỗi PostgreSQL trong `.env.example` | ✅ | Kết nối backend và Prisma tới PostgreSQL; database phải sẵn sàng trước khi khởi động API |
-| `JWT_SECRET` | `super_secret_key_123` | ✅ | Khóa ký/xác thực JWT (HS256). `POST /auth/login` (Task 7) **phải ký bằng cùng khóa này** |
-| `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | ✅ | Danh sách origin frontend được gọi API, cách nhau bằng dấu phẩy |
-| `ENABLE_DEMO_SEED` | `false` | ✅ | `true` = bật `POST /dev/demo-session` (token + đơn mẫu cho tài khoản demo). Bản nộp để `false` |
+### 5.1. Docker Compose – file `.env` ở thư mục gốc
 
-File: `apps/web/.env.local` (tạo từ `apps/web/.env.example`, chỉ cần khi chạy `npm run dev`):
+| Biến | Mặc định trong compose | Dùng cho |
+| ---- | ---------------------- | -------- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `maycha` / `maycha_password` / `maycha_db` | `db`, đồng thời ghép thành `DATABASE_URL` cho `backend` (host `db`) |
+| `JWT_SECRET` | `change_me_in_production` | `backend` – khoá ký/xác thực JWT |
+| `NEXT_PUBLIC_API_URL` | *(rỗng)* | `frontend`, nhúng lúc **build**. Rỗng = trình duyệt gọi `/api` trên frontend, Next.js chuyển tiếp tới `http://backend:3001`. Đặt giá trị chỉ khi muốn trình duyệt gọi thẳng một API khác |
+| `ENABLE_DEMO_SEED` | `false` | `backend` (bật `POST /dev/demo-session`) và `frontend` (nút "Dùng tài khoản demo", nhúng lúc build) |
+| `SEPAY_BANK_CODE` / `SEPAY_ACCOUNT_NUMBER` / `SEPAY_ACCOUNT_NAME` / `SEPAY_API_KEY` | *(rỗng)* | `backend` – thanh toán SePay QR. Để trống thì chỉ dùng được các phương thức mock |
+
+> `.env.example` ở thư mục gốc có dòng `NEXT_PUBLIC_API_URL=http://localhost:3001`. Nếu sao chép nguyên file thành `.env`, frontend sẽ gọi thẳng `localhost:3001` (vẫn chạy được trên máy local). Muốn dùng proxy như mặc định thì xoá dòng đó hoặc để trống giá trị.
+>
+> Biến `NEXT_PUBLIC_*` và `API_PROXY_TARGET` được nhúng lúc build – đổi giá trị thì phải `docker compose up --build`.
+
+### 5.2. Backend – `apps/api/.env` (tạo từ `apps/api/.env.example`)
 
 | Biến | Giá trị mẫu | Ý nghĩa |
 | ---- | ----------- | ------- |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Địa chỉ backend mà trình duyệt gọi tới |
-| `NEXT_PUBLIC_ENABLE_DEMO` | `false` | `true` = hiện nút **"Dùng tài khoản demo"** ở trang Đơn hàng khi chưa đăng nhập |
+| `PORT` | `3001` | Cổng backend (mặc định 3001) |
+| `DATABASE_URL` | `postgresql://maycha:maycha_password@localhost:5432/maycha_db?schema=public` | Kết nối Prisma tới PostgreSQL – **bắt buộc** khi chạy thật |
+| `JWT_SECRET` | `super_secret_key_123` | Khoá ký JWT (HS256) |
+| `CORS_ORIGIN` | `http://localhost:3000,http://127.0.0.1:3000` | Origin được gọi API trực tiếp, cách nhau bằng dấu phẩy |
+| `ENABLE_DEMO_SEED` | `false` | `true` = bật `POST /dev/demo-session` |
+| `BCRYPT_ROUNDS` | *(không đặt = 10)* | Độ khó băm mật khẩu, 4–15 |
+| `SEPAY_*` | *(rỗng)* | Như mục 5.1 |
 
-> Biến `NEXT_PUBLIC_*` được nhúng vào code lúc build/khởi động `next dev` – sửa xong phải chạy lại.
+### 5.3. Frontend – `apps/web/.env.local` (không bắt buộc)
 
-Quy tắc:
-- **Không commit file `.env`** (đã có trong `.gitignore`). Chỉ commit `.env.example`.
-- Thêm biến mới → **bắt buộc thêm vào `.env.example`** (giá trị giả) và vào bảng trên.
-- Không đặt mật khẩu / khóa thật vào `.env.example`.
-
----
-
-## 6. Kiểm tra sau khi cài
-
-Trước khi báo "chạy được", tự kiểm tra đủ các mục:
-
-- [ ] `node -v` ≥ `v24.15.0` (hoặc ≥ `v22.22.3`)
-- [ ] `npm install` ở `apps/api/` kết thúc bằng `added …` hoặc `up to date …`
-- [ ] `npm install` ở `apps/web/` kết thúc bằng `added …` hoặc `up to date …`
-- [ ] http://localhost:3001 hiển thị `Hello World!`
-- [ ] http://localhost:3001/orders/me trả `401` khi chưa đăng nhập
-- [ ] http://localhost:3000 hiển thị trang web
-- [ ] http://localhost:3000/orders hiển thị trang Lịch sử đơn (chưa đăng nhập → thẻ "Cần đăng nhập")
-- [ ] http://localhost:3000/login đăng ký được tài khoản mới
-- [ ] `git status` **không** hiện `.env` hay `node_modules/`
+| Biến | Ý nghĩa |
+| ---- | ------- |
+| `NEXT_PUBLIC_API_URL` | Địa chỉ backend để trình duyệt gọi thẳng. Không đặt = dùng proxy `/api` |
+| `API_PROXY_TARGET` | Đích của proxy `/api/*`, mặc định `http://localhost:3001` |
+| `NEXT_PUBLIC_ENABLE_DEMO` | `true` = hiện nút "Dùng tài khoản demo" (backend cũng phải bật `ENABLE_DEMO_SEED`) |
 
 ---
 
-## 7. Danh sách lệnh npm
+## 6. Danh sách API
 
-### Backend (`apps/api/`)
+Route có 🔒 cần header `Authorization: Bearer <accessToken>`; thiếu / sai / hết hạn token → `401`. Dữ liệu đầu vào được kiểm tra bởi `ValidationPipe` toàn cục (`src/app.setup.ts`): sai kiểu hoặc thiếu trường → `400`, trường lạ bị loại bỏ.
 
-| Lệnh | Tác dụng |
-| ---- | -------- |
-| `npm run start:dev` | Chạy dev, tự reload khi sửa code |
-| `npm run start` | Chạy một lần, không reload |
-| `npm run start:debug` | Chạy dev kèm debugger |
-| `npm run build` | Biên dịch ra `dist/` |
-| `npm run start:prod` | Chạy `dist/main.js` (phải `build` trước) |
-| `npm test` | Unit test (Jest) |
-| `npm run test:watch` | Unit test, chạy lại khi sửa |
-| `npm run test:cov` | Unit test + đo coverage |
-| `npm run test:e2e` | Test end-to-end |
-| `npm run lint` | Kiểm tra code (oxlint) |
-| `npm run format` | Định dạng code (Prettier) |
-| `npm run prisma:generate` | Sinh Prisma Client từ `prisma/schema.prisma` |
-| `npm run prisma:migrate` | Áp dụng migration còn thiếu; thêm `-- --name <tên>` khi tạo migration mới |
-| `npm run prisma:deploy` | Áp dụng các migration đã commit (phù hợp môi trường chạy) |
-| `npm run prisma:studio` | Mở Prisma Studio để xem dữ liệu |
-
-Prisma schema, migrations và `DATABASE_URL` được khai báo trong `apps/api/prisma/schema.prisma`, `apps/api/prisma/migrations/` và `apps/api/prisma.config.ts`. Khi chạy local, khởi động PostgreSQL trước rồi chạy `npm run prisma:deploy` trong `apps/api/`; khi cần tạo migration mới dùng `npm run prisma:migrate -- --name <tên>`. Prisma Client được sinh vào `node_modules/@prisma/client` trong bước generate/build.
-
-### Frontend (`apps/web/`)
-
-| Lệnh | Tác dụng |
-| ---- | -------- |
-| `npm run dev` | Chạy dev, tự reload khi sửa code |
-| `npm run build` | Build production |
-| `npm start` | Chạy bản đã build (phải `build` trước) |
-| `npm run lint` | Kiểm tra code (ESLint) |
+| Phương thức & đường dẫn | Task | Mô tả |
+| ----------------------- | ---- | ----- |
+| `GET /` | 1 | `Hello World!` – kiểm tra backend sống |
+| `GET /products` | 2 | Menu (id, tên, giá, ảnh, tồn kho) |
+| `GET /products/:id` | 2 | Chi tiết một món |
+| `POST /auth/register` | 7 | Đăng ký `{ email, password }` |
+| `POST /auth/login` | 7 | Đăng nhập, trả JWT |
+| 🔒 `POST /orders` | 6, 10 | Tạo đơn `PENDING` từ giỏ hàng (kèm `voucherCode` tuỳ chọn) |
+| 🔒 `GET /orders/me` | 9 | Lịch sử đơn của người đang đăng nhập, mới nhất trước |
+| 🔒 `GET /orders/:id` | 9 | Chi tiết một đơn cho màn hình xác nhận |
+| 🔒 `PATCH /orders/:id/status` | 10 | Chuyển trạng thái theo state machine, body `{ "status": "PREPARING" }` |
+| 🔒 `POST /payments` | 8, 10 | Thanh toán mock, idempotent |
+| 🔒 `GET /payments/loyalty` | 10 | Điểm tích luỹ của tài khoản |
+| 🔒 `POST /payments/sepay/checkout` | 8 (mở rộng) | Tạo mã QR chuyển khoản SePay cho một đơn |
+| `POST /payments/sepay/webhook` | 8 (mở rộng) | SePay báo giao dịch tiền vào; xác thực bằng header `Authorization: Apikey <SEPAY_API_KEY>` |
+| `POST /dev/demo-session` | 9 (demo) | Chỉ khi `ENABLE_DEMO_SEED=true`; tắt thì `404` |
 
 ---
 
-## 8. Lỗi thường gặp
+## 7. Lịch sử & xác nhận đơn (Task 9)
 
-| Triệu chứng | Nguyên nhân | Cách xử lý |
-| ----------- | ----------- | ---------- |
-| `nest: not found` / `'next' is not recognized…` | Chưa `npm install` hoặc đứng sai thư mục | `cd` vào đúng `apps/api/` hoặc `apps/web/` rồi `npm install` |
-| `npm warn EBADENGINE Unsupported engine … current: { node: 'v24.14.0' }` | Node thấp hơn yêu cầu | Nếu cuối vẫn có `added` / `up to date` thì **cài đã xong**, chạy tiếp được. Nên nâng Node lên ≥ 24.15, xóa `node_modules` rồi `npm install` lại |
-| `EADDRINUSE: address already in use :::3000` | Cổng bị chiếm (thường do backend chạy thiếu `PORT=3001`, hoặc server cũ chưa tắt) | `Ctrl + C` ở terminal cũ. Hoặc tìm và tắt tiến trình: Windows `netstat -ano \| findstr :3000` → `taskkill /PID <PID> /F`; macOS/Linux `lsof -i :3000` → `kill <PID>` |
-| Backend vẫn ở cổng 3000 dù `.env` có `PORT=3001` | Backend chưa đọc `.env` | Đặt `PORT` ngay trong lệnh chạy (xem [4.2](#42-backend)) |
-| `found N vulnerabilities … npm audit fix --force` | Cảnh báo bảo mật ở thư viện phát triển | **Không chạy `npm audit fix --force`**: lệnh này đổi phiên bản thư viện tùy ý, làm hỏng dự án chung |
-| PowerShell: `running scripts is disabled on this system` | Chính sách chặn script | Chạy một lần: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
-| Sau `git pull` báo `Cannot find module …` | Người khác đã thêm thư viện | `npm install` lại trong thư mục tương ứng |
-| `npm install` rất chậm / lỗi `EPERM` trên Windows | Repo nằm trong thư mục **OneDrive** đang đồng bộ `node_modules` | Nên clone repo ra ngoài OneDrive, ví dụ `C:\Projects\Maycha` |
+### 7.1. API
 
----
+| Endpoint | Kết quả | Mã lỗi |
+| -------- | ------- | ------ |
+| 🔒 `GET /orders/me` | Mảng đơn của user (lấy từ `sub` trong JWT), sắp xếp `createdAt` giảm dần | `401` |
+| 🔒 `GET /orders/:id` | Một đơn | `400` id không phải số · `401` · `404` không tồn tại **hoặc không phải đơn của mình** (không dùng 403 để không lộ đơn có tồn tại) |
 
-## 9. Quy tắc làm việc nhóm
-
-### 9.1. Nhánh (branch)
-
-- **Không push thẳng lên `main`.** Mọi thay đổi đi qua Pull Request (PR).
-- Đặt tên nhánh theo loại việc:
-
-  | Tiền tố | Dùng cho | Ví dụ |
-  | ------- | -------- | ----- |
-  | `feature/` | Chức năng mới | `feature/menu-api` |
-  | `fix/` | Sửa lỗi | `fix/cart-total` |
-  | `docs/` | Tài liệu | `docs/readme` |
-  | `chore/` | Cấu hình, thư viện | `chore/add-prisma` |
-
-### 9.2. Quy trình
-
-```bash
-# 1. Lấy code mới nhất
-git checkout main
-git pull origin main
-
-# 2. Tạo nhánh cho task
-git checkout -b feature/ten-task
-
-# 3. Code, rồi commit
-git add <các file đã sửa>
-git commit -m "feat(backend): thêm API danh sách menu"
-
-# 4. Đẩy lên GitHub
-git push -u origin feature/ten-task
-```
-
-Sau đó mở PR vào `main` trên GitHub, cần **ít nhất 1 thành viên khác duyệt** trước khi merge.
-
-### 9.3. Commit message
-
-Theo dạng `<loại>(<phạm vi>): <mô tả ngắn>`. Ví dụ:
-- `feat(frontend): trang giỏ hàng`
-- `fix(backend): sai tổng tiền khi có topping`
-- `docs: cập nhật hướng dẫn chạy`
-
-Loại hợp lệ: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
-
-### 9.4. Checklist trước khi tạo PR
-
-- [ ] Đã `git pull origin main` và xử lý xung đột (nếu có)
-- [ ] Backend và frontend đều chạy được theo [mục 🚀](#-chạy-web-nhanh)
-- [ ] `npm run lint` không lỗi (ở thư mục đã sửa)
-- [ ] `npm test` qua (nếu sửa backend)
-- [ ] Không commit `.env`, `node_modules/`, `dist/`, `.next/`
-- [ ] `package-lock.json` chỉ thay đổi khi **có cài / gỡ thư viện**
-- [ ] Đã cập nhật README nếu thay đổi cách cài, cách chạy, biến môi trường hoặc [trạng thái dự án](#1-trạng-thái-hiện-tại-của-dự-án)
-
-### 9.5. Thêm thư viện
-
-```bash
-cd apps/api           # hoặc apps/web
-npm install <tên-gói>             # thư viện chạy
-npm install -D <tên-gói>          # thư viện chỉ dùng khi phát triển
-```
-
-Commit **cả** `package.json` **và** `package-lock.json` trong cùng một commit, và ghi rõ trong PR để cả nhóm biết cần `npm install` lại.
-
----
-
-## 10. Docker Compose & bàn giao
-
-File `docker-compose.yml` ở thư mục gốc dựng 3 service:
-
-| Service | Image / build | Cổng | Phụ thuộc |
-| ------- | ------------- | ---- | --------- |
-| `db` | `postgres:16-alpine`, volume `db_data` | `5432` | – (có healthcheck `pg_isready`) |
-| `backend` | `apps/api/Dockerfile` (multi-stage, chạy migration rồi NestJS bằng user `node`) | `3001` | chờ `db` healthy |
-| `frontend` | `apps/web/Dockerfile` (`next build` → `next start`) | `3000` | `backend` |
-
-Kiểm tra API đang hoạt động: `Invoke-RestMethod http://localhost:3001/health` phải trả về `status: ok`. Endpoint này xác nhận tiến trình API đang phản hồi; không kiểm tra kết nối PostgreSQL.
-
-Biến cấu hình (đặt trong `.env` ở thư mục gốc, xem `.env.example`):
-
-| Biến | Mặc định | Dùng cho |
-| ---- | -------- | -------- |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `maycha` / `maycha_password` / `maycha_db` | `db`, và ghép thành `DATABASE_URL` cho `backend` |
-| `JWT_SECRET` | `change_me_in_production` | `backend` |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | `frontend` – nhúng lúc **build**, đổi giá trị thì phải `docker compose up --build` |
-| `ENABLE_DEMO_SEED` | `false` | `backend` (bật `POST /dev/demo-session`) và `frontend` (nút demo, nhúng lúc build) |
-
-> Backend tự chạy `prisma migrate deploy` trước khi khởi động API. Frontend gọi API bằng `process.env.NEXT_PUBLIC_API_URL` (trình duyệt gọi thẳng `localhost:3001`, nên không dùng tên service `backend`).
-
-### Kịch bản demo end-to-end (Sprint Review)
-
-**A. Luồng thật (dùng cho buổi Sprint Review):**
-
-1. `docker compose up --build`, mở http://localhost:3000.
-2. Menu → **Chọn món** → chọn size, topping → **Thêm vào giỏ** (badge "Xem giỏ hàng (n)" tăng).
-3. Giỏ hàng: tăng/giảm/xóa món, tổng tiền tự tính → **Tiến hành thanh toán**.
-4. Chưa đăng nhập → tự chuyển sang `/login` → bấm **Đăng ký**, nhập email + mật khẩu (≥ 8 ký tự) → tự đăng nhập và **quay lại đúng bước Thanh toán** (giỏ hàng vẫn giữ nguyên).
-5. Chọn **Ví điện tử** hoặc **Thẻ ngân hàng** → **Xác nhận trả**. Frontend gọi `POST /orders` (đơn `PENDING`) rồi `POST /payments` (kèm `idempotencyKey`).
-6. Tự chuyển tới **`/orders/<id>`** → màn hình xác nhận gọi `GET /orders/:id`: "Đặt hàng thành công!", mã đơn, **trạng thái `PAID`**, danh sách món, tổng tiền. Giỏ hàng được xóa.
-7. Bấm **"Xem lịch sử đơn"** → `/orders` gọi `GET /orders/me` → đơn vừa đặt ở đầu danh sách.
-8. Demo nhánh lỗi: đặt thêm một đơn, ở bước Thanh toán tích **"Giả lập thanh toán lỗi (demo)"** → màn hình "Thanh toán thất bại", trạng thái `PAYMENT_FAILED`, **giỏ hàng vẫn giữ nguyên** → bấm "Đặt lại" để thanh toán lại.
-9. Đăng xuất (góc trên) → mở `/orders` → thẻ "Cần đăng nhập" (API trả `401` khi thiếu token).
-
-> Tài khoản, đơn, thanh toán, tồn kho và loyalty được lưu trong PostgreSQL volume `db_data`; restart backend không xóa dữ liệu. Không dùng `docker compose down -v` nếu cần giữ database.
-
-**B. Tài khoản demo có sẵn đơn mẫu (tùy chọn):**
-
-Tạo file `.env` ở thư mục gốc với `ENABLE_DEMO_SEED=true` rồi `docker compose up --build`. Ở trang `/orders` sẽ có nút **"Dùng tài khoản demo"** → backend cấp JWT cho `demo-user` và tạo 3 đơn mẫu (`PAID`, `PAYMENT_FAILED`, `COMPLETED`).
-
-Gọi bằng terminal (macOS / Linux / Git Bash):
-
-```bash
-TOKEN=$(curl -s -X POST http://localhost:3001/dev/demo-session | node -pe "JSON.parse(require('fs').readFileSync(0)).accessToken")
-curl -s http://localhost:3001/orders/me -H "Authorization: Bearer $TOKEN"
-```
-
----
-
-## 11. API đơn hàng – Lịch sử & Xác nhận (Task 9)
-
-Cả hai endpoint đều cần header `Authorization: Bearer <JWT>`. Token ký **HS256** bằng `JWT_SECRET`, payload tối thiểu `{ "sub": <userId>, "email": "..." }` (đúng dạng mà `@nestjs/jwt` phát ra ở Task 7).
-
-| Endpoint | Mô tả | Mã lỗi |
-| -------- | ----- | ------ |
-| `GET /orders/me` | Lịch sử đơn của user đang đăng nhập, **mới nhất trước** | `401` thiếu/sai token |
-| `GET /orders/:id` | Chi tiết một đơn cho màn hình xác nhận | `400` id không phải số, `401`, `404` không tồn tại **hoặc không phải đơn của mình** |
-
-Ví dụ phản hồi `GET /orders/1042`:
+Ví dụ `GET /orders/1042`:
 
 ```json
 {
   "id": 1042,
   "code": "#1042",
   "status": "PAID",
+  "subtotal": 123000,
+  "discountAmount": 0,
   "total": 123000,
   "itemCount": 3,
   "createdAt": "2026-10-07T10:00:00.000Z",
@@ -497,95 +287,192 @@ Ví dụ phản hồi `GET /orders/1042`:
 }
 ```
 
-`status` là một trong: `PENDING`, `PAID`, `PAYMENT_FAILED`, `PREPARING`, `READY`, `COMPLETED`, `CANCELLED`. `GET /orders/me` trả một mảng các object cùng dạng.
+- `code` = `#` + id; `itemCount` = tổng số ly (tổng `qty`); `voucherCode` chỉ có khi đơn dùng mã giảm giá.
+- `status` ∈ `PENDING`, `PAID`, `PAYMENT_FAILED`, `PREPARING`, `READY`, `COMPLETED`, `CANCELLED`.
+- `userId` **không** được trả ra.
 
-### Giao diện (frontend)
+Luồng xử lý: `JwtAuthGuard` → `OrdersController` (`findMine`, `findOne`) → `OrdersService` (`findMyOrders`, `findMyOrder`) → `OrdersRepository` (`findByUserId`, `findById`, đọc PostgreSQL qua Prisma) → `toOrderResponse`.
+
+### 7.2. Giao diện
 
 | Trang | File | Gọi API | Hiển thị |
 | ----- | ---- | ------- | -------- |
-| `/orders/[id]` – Xác nhận | `apps/web/app/orders/[id]/page.tsx` | `GET /orders/:id` | Tiêu đề theo trạng thái, **mã đơn**, **trạng thái**, món (size, topping, SL), tổng tiền, giờ đặt. Đơn `PENDING` tự hỏi lại mỗi 3 giây (tối đa 1 phút) |
-| `/orders` – Lịch sử | `apps/web/app/orders/page.tsx` | `GET /orders/me` | Danh sách đơn mới nhất trước, bấm để mở chi tiết; trạng thái rỗng có nút "Xem menu" |
+| `/orders/[id]` – Xác nhận | `apps/web/app/orders/[id]/page.tsx` | `GET /orders/:id`, `GET /payments/loyalty` | Tiêu đề theo trạng thái ("Đặt hàng thành công", "Thanh toán chưa thành công"…), **mã đơn** cỡ lớn, **trạng thái**, món (size, topping, số lượng), voucher, tổng tiền, giờ đặt, điểm tích luỹ. Đơn `PENDING` tự hỏi lại mỗi 3 giây (tối đa 20 lần ≈ 1 phút). Cuối trang có bảng demo chuyển trạng thái (Task 10) |
+| `/orders` – Lịch sử | `apps/web/app/orders/page.tsx` | `GET /orders/me` | Danh sách đơn mới nhất trước, bấm để mở chi tiết; chưa có đơn → nút "Xem menu" |
 
-Cả hai trang xử lý: đang tải, chưa đăng nhập / token hết hạn (`401` → xóa token, hiện thẻ đăng nhập), không tìm thấy (`404`/`400`), mất kết nối backend (nút "Thử lại").
+Cả hai trang xử lý: đang tải; chưa đăng nhập / token hết hạn (`401` → xoá token, hiện thẻ "Đăng nhập để tiếp tục" có link quay lại đúng trang); không tìm thấy (`404` / `400`); mất kết nối backend (nút "Thử lại"). Các thẻ này nằm trong `apps/web/components/OrderMessages.tsx`.
 
-### Endpoint demo (chỉ khi `ENABLE_DEMO_SEED=true`)
+Sau khi bấm nút "Trả xx.xxx ₫" ở bước Thanh toán, `confirmPayment` trong `apps/web/app/page.tsx` gọi `POST /orders` → `POST /payments` rồi `router.push('/orders/<id>')` cho **cả** thành công lẫn thất bại. Thanh toán lỗi thì giỏ hàng được giữ; thanh toán lại với giỏ không đổi sẽ dùng lại đơn cũ, không tạo đơn trùng.
 
-| Endpoint | Mô tả |
-| -------- | ----- |
-| `POST /dev/demo-session` | Trả `{ accessToken, user, orders }` cho tài khoản cố định `demo-user` (token hạn 8 giờ). Lần đầu tạo 3 đơn mẫu; gọi lại không tạo trùng. Không nhận `userId` từ client nên không giả mạo được user thật. Tắt cờ → `404` |
+### 7.3. Tài khoản demo (tuỳ chọn)
 
-### Ghi chú tích hợp cho các task khác
-
-- **Đăng nhập (frontend)**: `/login` gọi `POST /auth/login`, rồi `setToken(accessToken)` trong `apps/web/lib/auth.ts` (lưu `localStorage["accessToken"]`) và chuyển về `?next=`.
-- **Thanh toán (frontend)**: `confirmPayment` trong `apps/web/app/page.tsx` gọi `POST /orders` → `POST /payments` → `router.push('/orders/' + orderId)` cho cả trường hợp thành công lẫn thất bại. Thanh toán lỗi rồi thử lại với giỏ không đổi sẽ dùng lại đơn cũ (không tạo đơn trùng).
-- **Backend**: `OrdersService.createOrder` và `PaymentsService` dùng chung `OrdersRepository` (`save(order)`), nên đơn tạo ra tự xuất hiện ở `/orders/me`.
-- **Persistence**: repository lưu dữ liệu nghiệp vụ qua Prisma/PostgreSQL; schema hiện hành và migrations nằm trong `apps/api/prisma/`.
-
-### API thanh toán (Task 8)
-
-| Endpoint | Body | Kết quả |
-| -------- | ---- | ------- |
-| `POST /payments` (cần JWT) | `{ "orderId": 1001, "method": "WALLET" \| "CARD" \| "FAIL", "idempotencyKey": "..." }` | `201` `{ success, orderId, status }` – `WALLET`/`CARD` → `PAID`; `FAIL` (giả lập cổng lỗi) → `PAYMENT_FAILED`. `400` sai dữ liệu / sai trạng thái, `404` không có đơn |
-
-### Test
+Đặt `ENABLE_DEMO_SEED=true` (file `.env` ở gốc khi dùng Docker, hoặc `apps/api/.env` + `NEXT_PUBLIC_ENABLE_DEMO=true` khi chạy thủ công). Ở trang `/orders` sẽ có nút **"Dùng tài khoản demo"**: backend cấp JWT 8 giờ cho tài khoản cố định `demo-user` và tạo 3 đơn mẫu (`PAID`, `PAYMENT_FAILED`, `COMPLETED`) ở lần gọi đầu, gọi lại không tạo trùng. Endpoint không nhận `userId` từ client nên không dùng để giả mạo user thật được. **Bản nộp để `false`.**
 
 ```bash
-cd apps/api
-npm test                                     # unit test: orders.service, jwt-auth.guard, demo.controller, auth.service
-npm run test:e2e -- orders.e2e-spec.ts       # e2e: 401 / 200 / 404 / 400 cho /orders/me, /orders/:id và luồng demo-session
-npm run test:e2e -- checkout.e2e-spec.ts     # e2e end-to-end: đăng ký → đăng nhập → POST /orders → POST /payments → xác nhận → lịch sử
+TOKEN=$(curl -s -X POST http://localhost:3001/dev/demo-session | node -pe "JSON.parse(require('fs').readFileSync(0)).accessToken")
+curl -s http://localhost:3001/orders/me -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
 
-## 12. API đăng ký / đăng nhập – JWT (Task 7)
+## 8. Đăng ký / đăng nhập (Task 7)
 
-Mã nguồn: `apps/api/src/auth/`. Mật khẩu băm bằng **bcrypt** (mặc định cost 10, đổi bằng `BCRYPT_ROUNDS` 4–15). JWT ký **HS256** bằng `JWT_SECRET`, sống **1 giờ**, payload `{ "sub": "<userId>", "email": "..." }`. Cần có `JWT_SECRET` trong `apps/api/.env` (`cp .env.example .env`) – backend tự đọc file này khi chạy local.
+Mã nguồn: `apps/api/src/auth/`. Mật khẩu băm bằng **bcrypt** (cost mặc định 10, đổi bằng `BCRYPT_ROUNDS`). JWT ký **HS256** bằng `JWT_SECRET`, sống **1 giờ**, payload `{ sub, email, role }`.
 
 | Endpoint | Body | Thành công | Lỗi |
 | -------- | ---- | ---------- | --- |
-| `POST /auth/register` | `{ "email", "password" }` (mật khẩu 8–72 ký tự) | `201` `{ id, email, loyaltyPoints }` | `400` dữ liệu sai, `409` email đã đăng ký |
-| `POST /auth/login` | `{ "email", "password" }` | `200` `{ accessToken, tokenType: "Bearer", expiresIn, user }` | `400` dữ liệu sai, `401` sai email/mật khẩu (cùng một thông báo) |
+| `POST /auth/register` | `{ "email", "password" }` (mật khẩu 8–72 ký tự) | `201` `{ id, email, loyaltyPoints }` | `400` dữ liệu sai · `409` email đã đăng ký |
+| `POST /auth/login` | `{ "email", "password" }` | `200` `{ accessToken, tokenType: "Bearer", expiresIn, user }` | `400` · `401` sai email/mật khẩu (cùng một thông báo) |
 
-Email được chuẩn hóa (cắt khoảng trắng, chữ thường). Tài khoản đăng ký mới mặc định có role `CUSTOMER`; role được lưu trong PostgreSQL và đưa vào JWT. Phản hồi không bao giờ chứa mật khẩu hay hash. Hiện ứng dụng chưa có API quản trị được giới hạn riêng theo role.
+Email được chuẩn hoá (cắt khoảng trắng, chữ thường). Tài khoản mới có role `CUSTOMER`. Phản hồi không bao giờ chứa mật khẩu hay hash. Frontend lưu token trong `localStorage["accessToken"]` (`apps/web/lib/auth.ts`).
 
 ```bash
-curl -X POST localhost:3001/auth/register -H 'content-type: application/json' \
-  -d '{"email":"kh@maycha.vn","password":"matkhau123"}'
-curl -X POST localhost:3001/auth/login -H 'content-type: application/json' \
-  -d '{"email":"kh@maycha.vn","password":"matkhau123"}'
-# dùng accessToken: -H 'Authorization: Bearer <accessToken>'
+curl -X POST localhost:3001/auth/register -H 'content-type: application/json' -d '{"email":"kh@maycha.vn","password":"matkhau123"}'
+curl -X POST localhost:3001/auth/login    -H 'content-type: application/json' -d '{"email":"kh@maycha.vn","password":"matkhau123"}'
 curl localhost:3001/orders/me -H 'Authorization: Bearer <accessToken>'
 ```
 
-**Guard bảo vệ route đặt đơn:** `JwtAuthGuard` (`src/common/auth/jwt-auth.guard.ts`) trả `401` khi thiếu / sai chữ ký / hết hạn token. Tài khoản được lưu trong PostgreSQL.
+---
+
+## 9. Nghiệp vụ đặt hàng & thanh toán (Task 8, 10)
+
+### 9.1. Thanh toán mock – `POST /payments` 🔒
+
+Body: `{ "orderId": 1001, "method": "WALLET" | "CARD" | "MOMO" | "VNPAY" | "FAIL", "idempotencyKey": "..." }`
+
+- `WALLET` / `CARD` / `MOMO` / `VNPAY` → đơn `PAID`; `FAIL` giả lập cổng lỗi → `PAYMENT_FAILED`.
+- Key idempotency lấy theo thứ tự: header `Idempotency-Key`, header `X-Idempotency-Key`, rồi trường `idempotencyKey` trong body. Gửi lại cùng key và cùng nội dung → trả lại kết quả cũ, không trừ tiền/cộng điểm lần 2. Dùng lại key với đơn hoặc phương thức khác → `409`.
+- Lỗi: `400` sai dữ liệu / sai trạng thái · `404` không có đơn.
+
+### 9.2. SePay QR (tuỳ chọn)
+
+1. Cấu hình 4 biến `SEPAY_*` (mục 5).
+2. Ở bước Thanh toán chọn **SePay QR** → frontend gọi `POST /payments/sepay/checkout` và mở trang `/payments/sepay/<id>` hiển thị QR, nội dung chuyển khoản dạng `MAYCHA-<id>`.
+3. SePay gọi `POST /payments/sepay/webhook` (header `Authorization: Apikey <SEPAY_API_KEY>`); backend kiểm tra tài khoản nhận, số tiền và mã đơn rồi chuyển đơn sang `PAID`. Trang QR tự hỏi lại trạng thái.
+
+API phải truy cập được qua HTTPS từ Internet (ví dụ dùng ngrok). **Chỉ dùng tài khoản ngân hàng thử nghiệm** – chuyển khoản QR là tiền thật. Chi tiết trong [`docs/deployment.md`](docs/deployment.md).
+
+### 9.3. State machine, tồn kho, voucher, loyalty
+
+- **State machine:** `PENDING → PAID → PREPARING → READY → COMPLETED`. `PENDING` có thể sang `PAYMENT_FAILED` hoặc `CANCELLED`; `PAYMENT_FAILED` có thể thanh toán lại thành `PAID` hoặc huỷ; `PAID` có thể huỷ. `COMPLETED` và `CANCELLED` là trạng thái kết thúc. Bước sai → `400` (hàm `assertTransition`).
+- **Tồn kho:** `POST /orders` trừ kho trong transaction với điều kiện `stock >= qty`, nên đặt đồng thời không bán vượt; huỷ đơn thì hoàn kho trong cùng transaction.
+- **Voucher:** `MAYCHA10` giảm 10%, `BREWLITE20` giảm tối đa 20.000đ. Mã sai → `400`.
+- **Loyalty:** sau khi thanh toán thành công cộng 1 điểm / 10.000đ thực trả; xem bằng `GET /payments/loyalty`.
+
+---
+
+## 10. Kịch bản demo end-to-end (Sprint Review)
+
+1. `docker compose up --build`, mở http://localhost:3000.
+2. Menu → chọn món → chọn size, topping → **Thêm vào giỏ** (badge giỏ hàng tăng).
+3. Giỏ hàng: tăng/giảm/xoá món, tổng tiền tự tính → **Thanh toán**.
+4. Chưa đăng nhập → tự chuyển `/login` → **Đăng ký** (mật khẩu ≥ 8 ký tự) → tự đăng nhập và quay lại đúng bước Thanh toán, giỏ hàng còn nguyên.
+5. Chọn **Ví điện tử** hoặc **Thẻ ngân hàng** → bấm **Trả xx.xxx ₫** (nút hiện tổng tiền).
+6. **Màn hình xác nhận** `/orders/<id>`: "Đặt hàng thành công", mã đơn, trạng thái **Đã thanh toán**, danh sách món, tổng tiền. Giỏ hàng được xoá.
+7. **Xem đơn của tôi** → `/orders`: đơn vừa đặt ở đầu danh sách.
+8. Nhánh lỗi: đặt thêm đơn, tích **"Giả lập thanh toán lỗi"** → "Thanh toán chưa thành công", trạng thái `PAYMENT_FAILED`, giỏ hàng vẫn giữ → **Thanh toán lại**.
+9. Bảo mật: đăng xuất rồi mở `/orders` → thẻ "Đăng nhập để tiếp tục" (`401`); mở `/orders/<id>` của tài khoản khác → "Không tìm thấy đơn hàng" (`404`).
+10. (Task 10) Ở cuối màn hình xác nhận, bấm lần lượt **Bắt đầu pha chế → Pha xong, gọi khách → Đã giao cho khách**; trạng thái kết thúc không còn nút chuyển.
+
+Tài khoản, đơn, thanh toán, tồn kho và điểm loyalty lưu trong volume `db_data`; khởi động lại không mất dữ liệu (trừ khi `docker compose down -v`).
+
+---
+
+## 11. Kiểm thử & CI
+
+Chạy trong `apps/api`:
 
 ```bash
-cd apps/api
-npm test                                  # unit: auth.service (bcrypt, JWT, 409, 401)
-npm run test:e2e -- auth.e2e-spec.ts      # e2e: register/login + guard 401/200
+npm test                                        # unit test (Jest)
+npm run test:e2e                                # toàn bộ test e2e trong tests/api
+npm run test:e2e -- orders.e2e-spec.ts          # Task 9: 401 / 200 / 404 / 400 cho /orders/me, /orders/:id, demo-session
+npm run test:e2e -- checkout.e2e-spec.ts        # Task 9: đăng ký → đăng nhập → POST /orders → POST /payments → xác nhận → lịch sử
+npm run test:e2e -- auth.e2e-spec.ts            # Task 7: register / login + guard
+npm test -- src/orders/backend.advanced.spec.ts # Task 10: state machine, idempotency, tồn kho đồng thời, voucher, loyalty
 ```
 
-## 13. Nghiệp vụ đặt hàng & thanh toán (Task 10)
+| File test | Nội dung |
+| --------- | -------- |
+| `src/common/auth/jwt-auth.guard.spec.ts` | Ký/xác thực JWT, token sai chữ ký / hết hạn / bị sửa, guard 401 / 500 |
+| `src/orders/orders.service.spec.ts` | Logic đơn hàng |
+| `src/orders/backend.advanced.spec.ts` | Tiêu chí chấm Task 10 |
+| `src/auth/auth.service.spec.ts`, `src/dev/demo.controller.spec.ts`, `src/payments/sepay*.spec.ts` | Đăng nhập, tài khoản demo, SePay |
+| `tests/api/*.e2e-spec.ts` | Gửi request HTTP thật tới toàn bộ ứng dụng NestJS |
 
-Các API nghiệp vụ cần JWT:
+> Khi chạy test, `NODE_ENV=test` nên `PrismaModule` cung cấp `null` và các repository dùng bộ nhớ trong, test **không cần** PostgreSQL. Khi chạy thật hoặc trong Docker, dữ liệu nằm trong PostgreSQL.
 
-| Endpoint | Mô tả |
-| -------- | ----- |
-| `POST /orders` | Kiểm tra giỏ hàng và voucher, giữ tồn kho, tạo đơn `PENDING`; nếu thao tác lưu đơn lỗi thì tồn kho được rollback |
-| `PATCH /orders/:id/status` | Chỉ cho phép các bước theo state machine; khi hủy đơn, cập nhật trạng thái và hoàn kho trong cùng transaction PostgreSQL |
-| `POST /payments` | Mock thanh toán `WALLET`/`CARD`/`MOMO`/`VNPAY`; gửi `Idempotency-Key` (hoặc `X-Idempotency-Key`) để phát lại kết quả của cùng yêu cầu |
-| `GET /payments/loyalty` | Trả số điểm loyalty của tài khoản |
+**CI** (`.github/workflows/ci.yml`) chạy mỗi lần push lên `main` và mỗi Pull Request: dựng PostgreSQL, `npm ci`, `prisma:deploy`, build + lint + unit test + e2e cho backend, lint + build cho frontend.
 
-State machine chính: `PENDING → PAID → PREPARING → READY → COMPLETED`. `PENDING` và `PAID` có thể chuyển sang `CANCELLED`; `PAYMENT_FAILED` có thể thanh toán lại thành `PAID` hoặc hủy. Trạng thái kết thúc không được chuyển tiếp.
+---
 
-Mỗi key idempotency được giới hạn theo user và nội dung yêu cầu. Dùng lại key với đơn/phương thức khác trả `409 Conflict`. Voucher hiện có: `MAYCHA10` giảm 10% và `BREWLITE20` giảm tối đa 20.000đ. Điểm được cộng sau thanh toán thành công, theo tỷ lệ 1 điểm / 10.000đ thực trả.
+## 12. Danh sách lệnh npm
 
-Đơn hàng cùng các dòng hàng, giữ/hoàn tồn kho, trạng thái thanh toán, idempotency và điểm loyalty được ghi trong transaction PostgreSQL. Các sản phẩm mẫu được upsert khi backend khởi động; stock hiện có được giữ nguyên.
+### Backend (`apps/api`)
 
-### Test Task 10
+| Lệnh | Tác dụng |
+| ---- | -------- |
+| `npm run start:dev` | Chạy dev, tự reload |
+| `npm run start` / `npm run start:debug` | Chạy một lần / kèm debugger |
+| `npm run build` | `prisma generate` + biên dịch ra `dist/` |
+| `npm run start:prod` | Chạy `dist/main.js` (phải build trước) |
+| `npm test` / `npm run test:watch` / `npm run test:cov` | Unit test / chạy lại khi sửa / đo coverage |
+| `npm run test:e2e` | Test end-to-end |
+| `npm run lint` | Kiểm tra code (oxlint) cho `src` và `tests/api` |
+| `npm run format` | Định dạng code (Prettier) |
+| `npm run prisma:generate` | Sinh Prisma Client |
+| `npm run prisma:deploy` | Áp dụng các migration đã commit |
+| `npm run prisma:migrate -- --name <tên>` | Tạo migration mới khi sửa `schema.prisma` |
+| `npm run prisma:studio` | Xem dữ liệu bằng Prisma Studio |
 
-```powershell
-cd apps/api
-npm test -- src/orders/backend.advanced.spec.ts
+### Frontend (`apps/web`)
+
+| Lệnh | Tác dụng |
+| ---- | -------- |
+| `npm run dev` | Chạy dev, tự reload |
+| `npm run build` | Build production |
+| `npm start` | Chạy bản đã build |
+| `npm run lint` | ESLint |
+
+---
+
+## 13. Lỗi thường gặp
+
+| Triệu chứng | Nguyên nhân | Cách xử lý |
+| ----------- | ----------- | ---------- |
+| `nest: not found` / `'next' is not recognized…` | Chưa `npm install` hoặc đứng sai thư mục | `cd apps/api` hoặc `cd apps/web` rồi `npm install` |
+| `DATABASE_URL is required to connect to PostgreSQL` | Thiếu `apps/api/.env` | `cp .env.example .env` trong `apps/api` |
+| Backend báo không kết nối được database | PostgreSQL chưa chạy | `docker compose up -d db`, đợi vài giây rồi chạy lại backend |
+| `The table ... does not exist` | Chưa áp dụng migration | `npm run prisma:deploy` trong `apps/api` |
+| `npm warn EBADENGINE … current: { node: 'v24.14.0' }` | Node thấp hơn yêu cầu | Nâng Node ≥ 24.15, xoá `node_modules` rồi `npm install` lại |
+| `EADDRINUSE: address already in use :::3000` / `:::3001` | Cổng bị chiếm (server cũ chưa tắt, hoặc backend chạy thiếu `PORT=3001`) | `Ctrl + C` terminal cũ. Windows: `netstat -ano \| findstr :3000` → `taskkill /PID <PID> /F`; macOS/Linux: `lsof -i :3000` → `kill <PID>` |
+| Trang `/orders` luôn "Đăng nhập để tiếp tục" dù vừa đăng nhập | Token hết hạn (1 giờ) hoặc backend đổi `JWT_SECRET` | Đăng nhập lại |
+| Frontend báo "Không kết nối được tới máy chủ" | Backend chưa chạy, hoặc `NEXT_PUBLIC_API_URL` trỏ sai | Kiểm tra http://localhost:3001; bỏ `NEXT_PUBLIC_API_URL` để dùng proxy mặc định |
+| Đổi biến `NEXT_PUBLIC_*` mà không có tác dụng | Biến được nhúng lúc build | Dev: tắt và chạy lại `npm run dev`; Docker: `docker compose up --build` |
+| `found N vulnerabilities … npm audit fix --force` | Cảnh báo ở thư viện | **Không** chạy `npm audit fix --force` (đổi phiên bản tuỳ ý, làm hỏng dự án chung) |
+| PowerShell: `running scripts is disabled on this system` | Chính sách chặn script | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| `npm install` rất chậm / lỗi `EPERM` trên Windows | Repo nằm trong thư mục **OneDrive** đang đồng bộ `node_modules` | Clone repo ra ngoài OneDrive, ví dụ `C:\Projects\Maycha` |
+
+---
+
+## 14. Quy tắc làm việc nhóm
+
+**Nhánh:** không push thẳng lên `main`; mọi thay đổi đi qua Pull Request và cần **ít nhất 1 thành viên khác duyệt**. Đặt tên nhánh theo loại việc: `feature/…`, `fix/…`, `docs/…`, `chore/…`.
+
+```bash
+git checkout main && git pull origin main      # 1. lấy code mới nhất
+git checkout -b feature/ten-task               # 2. tạo nhánh
+git add <các file đã sửa>                      # 3. commit
+git commit -m "feat(backend): thêm API danh sách menu"
+git push -u origin feature/ten-task            # 4. đẩy lên rồi mở PR vào main
 ```
+
+**Commit message:** `<loại>(<phạm vi>): <mô tả ngắn>`, loại ∈ `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
+
+**Checklist trước khi tạo PR:**
+
+- [ ] Đã `git pull origin main` và xử lý xung đột
+- [ ] Backend và frontend chạy được
+- [ ] `npm run lint` không lỗi; `npm test` và `npm run test:e2e` qua (nếu sửa backend)
+- [ ] Không commit `.env`, `node_modules/`, `dist/`, `.next/`
+- [ ] `package-lock.json` chỉ thay đổi khi có cài / gỡ thư viện (commit cùng `package.json`)
+- [ ] Đã cập nhật README nếu đổi cách cài, cách chạy, biến môi trường, API hoặc [trạng thái task](#3-trạng-thái-10-task)
