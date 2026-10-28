@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
 /**
- * Trạng thái đơn hàng (xem Mục 9.1 – Order State Machine trong đề bài).
+ * Các trạng thái hợp lệ của đơn hàng.
  * PENDING → PAID → PREPARING → READY → COMPLETED
  * Nhánh ngoại lệ: PAYMENT_FAILED, CANCELLED.
  */
@@ -16,7 +16,7 @@ export enum OrderStatus {
 }
 
 /**
- * Bảng ánh xạ chuyển trạng thái hợp lệ theo Mục 9.1 (Sơ đồ máy trạng thái đơn hàng).
+ * Bảng ánh xạ các chuyển trạng thái hợp lệ.
  */
 export const VALID_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.PENDING]: [
@@ -33,7 +33,7 @@ export const VALID_ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 /**
- * Hàm kiểm tra và chặn chuyển trạng thái không hợp lệ theo Mục 9.1.
+ * Hàm kiểm tra và chặn chuyển trạng thái không hợp lệ.
  * Ném BadRequestException nếu chuyển đổi vi phạm sơ đồ máy trạng thái.
  */
 export function assertTransition(
@@ -50,7 +50,7 @@ export function assertTransition(
 
 export type ProductSize = 'S' | 'M' | 'L';
 
-/** OrderItem(id, orderId, productId, size, qty, lineTotal) – Mục 12.2 */
+/** Dữ liệu một món hàng trong đơn. */
 export interface OrderItem {
   id: number;
   orderId: number;
@@ -63,7 +63,7 @@ export interface OrderItem {
   lineTotal: number;
 }
 
-/** Order(id, userId, status, total, createdAt) – Mục 12.2 */
+/** Dữ liệu đơn hàng. */
 export interface Order {
   id: number;
   userId: string;
@@ -76,4 +76,3 @@ export interface Order {
   updatedAt: Date;
   items: OrderItem[];
 }
-

@@ -79,7 +79,7 @@ const DEFAULT_HEADLINE: Headline = {
   tone: 'bg-leaf text-white',
 };
 
-/** Các bước chuyển hợp lệ của Order State Machine (Task 10.1). */
+/** Các bước chuyển trạng thái đơn hàng hợp lệ. */
 const TRANSITIONS: Partial<Record<OrderStatus, { to: OrderStatus; label: string; danger?: boolean }[]>> = {
   PENDING: [
     { to: 'PAID', label: 'Xác nhận đã thanh toán' },
@@ -115,8 +115,8 @@ function HeadlineIcon({ icon }: { icon: Icon }) {
 
 /**
  * Màn hình Xác nhận đơn – gọi GET /orders/:id (cần JWT).
- * Task 8: sau khi POST /payments xong, chuyển hướng tới `/orders/<id>`.
- * Task 10: điểm loyalty, voucher, bảng chuyển trạng thái (State Machine).
+ * Sau khi thanh toán, chuyển hướng tới `/orders/<id>`.
+ * Hiển thị điểm loyalty, voucher và các bước chuyển trạng thái.
  */
 export default function OrderConfirmationPage() {
   const params = useParams<{ id: string }>();
@@ -316,7 +316,7 @@ export default function OrderConfirmationPage() {
         </Link>
       </div>
 
-      {/* Bảng chuyển trạng thái – dùng khi demo Task 10.1 (Order State Machine) */}
+      {/* Bảng chuyển trạng thái đơn hàng */}
       <section className="mt-12 rounded-3xl border border-dashed border-line p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[15px] font-semibold">Chuyển trạng thái đơn (demo State Machine)</h2>

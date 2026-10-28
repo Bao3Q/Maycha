@@ -12,8 +12,8 @@ import { InvalidTokenError, verifyJwt } from './jwt.util';
 /**
  * Bảo vệ route bằng header `Authorization: Bearer <JWT>`.
  *
- * Token được ký HS256 bằng JWT_SECRET (do POST /auth/login – Task 7 phát ra).
- * Khi Task 7 có guard Passport riêng, có thể thay guard này bằng guard đó
+ * Token được ký HS256 bằng JWT_SECRET (do POST /auth/login phát ra).
+ * Khi cần, có thể thay guard này bằng guard Passport
  * miễn là `request.user` vẫn có dạng { id, email }.
  */
 @Injectable()

@@ -230,7 +230,7 @@ function HomePageContent() {
   const goToLogin = () =>
     router.push(`/login?next=${encodeURIComponent("/?view=checkout")}`);
 
-  // Luồng nghiệp vụ (Mục 5 đề bài): Xem giỏ → Đăng nhập (nếu chưa) → Thanh toán.
+  // Luồng đặt hàng: xem giỏ → đăng nhập nếu cần → thanh toán.
   const proceedToCheckout = () => {
     if (!getToken()) {
       goToLogin();

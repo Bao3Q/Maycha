@@ -47,7 +47,7 @@ export class PaymentsController {
     return this.sepayService.createCheckout(user.id, dto.orderId);
   }
 
-  /** Task 10.4: Xem điểm thưởng tích lũy của tài khoản */
+  /** Xem điểm thưởng tích lũy của tài khoản. */
   @Get('loyalty')
   async getLoyalty(@CurrentUser() user: AuthUser) {
     return {

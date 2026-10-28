@@ -11,7 +11,7 @@ import {
 import { OrderSize } from './dto/create-order.dto';
 import { PaymentMethod } from '../payments/dto/create-payment.dto';
 
-describe('Task 10 – Nghiệp vụ Backend nâng cao (BrewLite)', () => {
+describe('Nghiệp vụ backend nâng cao (BrewLite)', () => {
   let ordersRepo: OrdersRepository;
   let productsService: ProductsService;
   let ordersService: OrdersService;

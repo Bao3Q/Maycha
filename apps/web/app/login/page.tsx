@@ -12,7 +12,7 @@ const inputClass =
   'mt-2 w-full rounded-xl border border-line bg-paper px-4 py-3 text-[16px] outline-none transition-colors placeholder:text-muted/60 focus:border-leaf focus:ring-4 focus:ring-matcha';
 
 /**
- * Đăng nhập / Đăng ký – gọi POST /auth/login, /auth/register (Task 7).
+ * Đăng nhập / Đăng ký – gọi POST /auth/login, /auth/register.
  * Thành công → lưu JWT rồi quay lại trang `?next=` (mặc định là Menu).
  */
 function LoginForm() {

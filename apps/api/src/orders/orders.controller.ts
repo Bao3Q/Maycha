@@ -21,7 +21,7 @@ import { OrderStatus } from './entities/order.entity';
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
-  /** Task 6: Tạo đơn hàng mới từ giỏ hàng (POST /orders) */
+  /** Tạo đơn hàng mới từ giỏ hàng. */
   @Post()
   create(
     @CurrentUser() user: AuthUser,
@@ -49,7 +49,7 @@ export class OrdersController {
     return this.ordersService.findMyOrder(user.id, id);
   }
 
-  /** Task 10.1: Chuyển trạng thái đơn hàng (Order State Machine) */
+  /** Chuyển trạng thái đơn hàng. */
   @Patch(':id/status')
   updateStatus(
     @CurrentUser() user: AuthUser,

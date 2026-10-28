@@ -7,7 +7,7 @@ export interface AuthUser {
   role?: UserRole;
 }
 
-/** Payload JWT mà POST /auth/login (Task 7) cần phát ra. */
+/** Payload JWT do POST /auth/login phát ra. */
 export interface JwtPayload {
   sub: string | number;
   email?: string;

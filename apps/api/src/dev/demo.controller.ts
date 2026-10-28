@@ -34,9 +34,7 @@ export function isDemoEnabled(): boolean {
 /**
  * CHỈ DÙNG ĐỂ DEMO – bật bằng ENABLE_DEMO_SEED=true.
  *
- * Khi Task 6 (POST /orders), Task 7 (POST /auth/login) và Task 8
- * (POST /payments) chưa ghép xong, endpoint này giúp demo màn hình
- * Xác nhận & Lịch sử đơn:
+ * Endpoint này hỗ trợ thử màn hình Xác nhận và Lịch sử đơn:
  *  - cấp JWT cho một tài khoản demo cố định (không nhận userId từ client,
  *    nên không thể dùng để giả mạo user thật);
  *  - tạo sẵn vài đơn mẫu với các trạng thái khác nhau (chỉ tạo lần đầu).

@@ -5,9 +5,9 @@ import { UsersRepository } from './users.repository';
 import { JwtAuthGuard } from '../common/auth/jwt-auth.guard';
 
 /**
- * Task 7 – Đăng ký / Đăng nhập (JWT).
+ * Đăng ký / đăng nhập bằng JWT.
  *
- * Route cần đăng nhập (vd. POST /orders của Task 6) chỉ cần gắn
+ * Route cần đăng nhập (ví dụ POST /orders) chỉ cần gắn
  * `@UseGuards(JwtAuthGuard)` – guard export từ đây, hoặc import trực tiếp
  * từ `common/auth/jwt-auth.guard` như OrdersController đang làm.
  */

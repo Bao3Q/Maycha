@@ -13,7 +13,7 @@ import { Order, OrderStatus, assertTransition } from './entities/order.entity';
 import { ProductsService } from '../products/products.service';
 import { PrismaService } from '../common/prisma.service';
 
-/** Danh sách mã giảm giá hợp lệ (Task 10.4) */
+/** Danh sách mã giảm giá hợp lệ. */
 export const VALID_VOUCHERS: Record<string, (subtotal: number) => number> = {
   MAYCHA10: (subtotal) => Math.round(subtotal * 0.1), // Giảm 10%
   BREWLITE20: (subtotal) => Math.min(20000, subtotal), // Giảm 20.000đ
@@ -32,7 +32,7 @@ export class OrdersService {
     return (await this.ordersRepository.findByUserId(userId)).map(toOrderResponse);
   }
 
-  /** POST /orders – Tạo đơn hàng mới với trạng thái PENDING (Task 6 & Task 10) */
+  /** POST /orders – Tạo đơn hàng mới với trạng thái PENDING. */
   async createOrder(
     userId: string,
     createOrderDto: CreateOrderDto,
@@ -180,7 +180,7 @@ export class OrdersService {
   }
 
   /**
-   * PATCH /orders/:id/status – Chuyển trạng thái đơn hàng (Order State Machine - Task 10.1).
+   * PATCH /orders/:id/status – Chuyển trạng thái đơn hàng.
    * Kiểm tra bằng assertTransition; nếu hủy đơn (CANCELLED) thì hoàn tồn kho.
    */
   async updateOrderStatus(
@@ -193,7 +193,7 @@ export class OrdersService {
       throw new NotFoundException(`Không tìm thấy đơn hàng #${orderId}`);
     }
 
-    // Chặn chuyển trạng thái sai quy tắc theo Task 10.1
+    // Chặn chuyển trạng thái không hợp lệ.
     assertTransition(order.status, nextStatus);
 
     if (this.prisma) {

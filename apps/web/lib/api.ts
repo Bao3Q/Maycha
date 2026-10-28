@@ -171,7 +171,7 @@ export function createDemoSession(): Promise<
   return request('/dev/demo-session', { method: 'POST', auth: false });
 }
 
-/** PATCH /orders/:id/status – chuyển trạng thái đơn (Task 10.1 Order State Machine). */
+/** PATCH /orders/:id/status – chuyển trạng thái đơn hàng. */
 export function updateOrderStatus(
   id: number | string,
   status: OrderStatus,
@@ -183,14 +183,14 @@ export function updateOrderStatus(
   });
 }
 
-/** GET /payments/loyalty – lấy điểm thưởng tích lũy của user (Task 10.4). */
+/** GET /payments/loyalty – lấy điểm thưởng tích lũy của user. */
 export function fetchLoyaltyPoints(): Promise<
   ApiResult<{ userId: string; loyaltyPoints: number }>
 > {
   return request<{ userId: string; loyaltyPoints: number }>('/payments/loyalty');
 }
 
-// ---- Đăng ký / đăng nhập (Task 7) ----
+// ---- Đăng ký / đăng nhập ----
 
 export interface LoginResponse {
   accessToken: string;
@@ -226,7 +226,7 @@ export function login(
   return request('/auth/login', { ...jsonBody({ email, password }), auth: false });
 }
 
-// ---- Đặt đơn (Task 6) & thanh toán (Task 8 & 10) ----
+// ---- Đặt đơn & thanh toán ----
 
 export interface CreateOrderItem {
   productId: string;
