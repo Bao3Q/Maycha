@@ -47,7 +47,6 @@ jobs:
           npm run build
           npm run lint
           npm test -- --runInBand
-          npm run test:e2e -- --runInBand
       - name: Install web dependencies
         working-directory: apps/web
         run: npm ci

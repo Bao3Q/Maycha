@@ -75,7 +75,7 @@ export class ProductsService implements OnModuleInit {
     }
   }
 
-  create(createProductDto: CreateProductDto) {
+  create(_createProductDto: CreateProductDto) {
     return 'This action adds a new product';
   }
 
@@ -212,7 +212,7 @@ export class ProductsService implements OnModuleInit {
     }
   }
 
-  update(id: number, updateProductDto: UpdateProductDto) {
+  update(id: number, _updateProductDto: UpdateProductDto) {
     return `This action updates a #${id} product`;
   }
 
