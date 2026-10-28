@@ -167,7 +167,7 @@ export default function SePayPaymentPage() {
                 width={300}
                 height={300}
                 unoptimized
-                className="h-auto w-full max-w-[300px] rounded-2xl border border-line bg-white p-2"
+                className="h-auto w-full max-w-75 rounded-2xl border border-line bg-white p-2"
               />
               <p className="mt-3 text-center text-sm text-muted">
                 Đang chờ xác nhận thanh toán…
