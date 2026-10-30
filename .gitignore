@@ -2,3 +2,4 @@ node_modules/
 apps/api/generated/prisma/
 apps/web/.open-next/
 apps/web/.wrangler/
+.codegraph/
