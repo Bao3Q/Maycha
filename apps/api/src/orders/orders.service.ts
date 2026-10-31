@@ -19,17 +19,25 @@ export const VALID_VOUCHERS: Record<string, (subtotal: number) => number> = {
   BREWLITE20: (subtotal) => Math.min(20000, subtotal), // Giảm 20.000đ
 };
 
+const VALID_TOPPINGS = new Set(['Trân châu', 'Kem']);
+const SIZE_SURCHARGE: Record<string, number> = { S: 0, M: 5000, L: 10000 };
+const TOPPING_SURCHARGE = 5000;
+
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly ordersRepository: OrdersRepository,
     @Optional() private readonly productsService?: ProductsService,
-    @Optional() @Inject(PrismaService) private readonly prisma?: PrismaService | null,
+    @Optional()
+    @Inject(PrismaService)
+    private readonly prisma?: PrismaService | null,
   ) {}
 
   /** GET /orders/me – lịch sử đơn của user đang đăng nhập (mới nhất trước). */
   async findMyOrders(userId: string): Promise<OrderResponseDto[]> {
-    return (await this.ordersRepository.findByUserId(userId)).map(toOrderResponse);
+    return (await this.ordersRepository.findByUserId(userId)).map(
+      toOrderResponse,
+    );
   }
 
   /** POST /orders – Tạo đơn hàng mới với trạng thái PENDING. */
@@ -46,14 +54,42 @@ export class OrdersService {
         !item.productId ||
         !Number.isSafeInteger(item.qty) ||
         item.qty <= 0 ||
-        !Number.isSafeInteger(item.unitPrice) ||
-        item.unitPrice < 0
+        !Object.hasOwn(SIZE_SURCHARGE, item.size) ||
+        (item.toppings ?? []).some((topping) => !VALID_TOPPINGS.has(topping)) ||
+        new Set(item.toppings ?? []).size !== (item.toppings ?? []).length
       ) {
-        throw new BadRequestException('Thông tin sản phẩm trong đơn không hợp lệ');
+        throw new BadRequestException(
+          'Thông tin sản phẩm trong đơn không hợp lệ',
+        );
       }
     }
 
-    const subtotal = createOrderDto.items.reduce((sum, item) => {
+    // Never trust product name or price supplied by the browser. Resolve the
+    // catalog item and calculate the final unit price on the server.
+    const catalog = this.productsService ?? new ProductsService(this.prisma);
+    const normalizedItems = await Promise.all(
+      createOrderDto.items.map(async (item) => {
+        const product = await catalog.findOneFromStorage(item.productId);
+        if (!product) {
+          throw new NotFoundException(
+            `Sản phẩm với ID ${item.productId} không tồn tại`,
+          );
+        }
+        const toppings = item.toppings ? [...item.toppings] : [];
+        const unitPrice =
+          product.price +
+          SIZE_SURCHARGE[item.size] +
+          toppings.length * TOPPING_SURCHARGE;
+        return {
+          ...item,
+          productName: product.name,
+          unitPrice,
+          toppings,
+        };
+      }),
+    );
+
+    const subtotal = normalizedItems.reduce((sum, item) => {
       const lineTotal = item.unitPrice * item.qty;
       const nextSubtotal = sum + lineTotal;
       if (
@@ -83,10 +119,15 @@ export class OrdersService {
     const total = Math.max(0, subtotal - discountAmount);
 
     if (this.prisma) {
-      const quantities = this.aggregateQuantities(createOrderDto);
+      const quantities = this.aggregateQuantities({
+        ...createOrderDto,
+        items: normalizedItems,
+      });
       const createdOrderId = await this.prisma.$transaction(async (tx) => {
         for (const [productId, qty] of quantities) {
-          const product = await tx.product.findUnique({ where: { id: productId } });
+          const product = await tx.product.findUnique({
+            where: { id: productId },
+          });
           if (!product) {
             throw new NotFoundException(
               `Sản phẩm với ID ${productId} không tồn tại`,
@@ -117,7 +158,7 @@ export class OrdersService {
             voucherCode,
             total,
             items: {
-              create: createOrderDto.items.map((item) => ({
+              create: normalizedItems.map((item) => ({
                 productId: item.productId,
                 productName: item.productName,
                 size: item.size,
@@ -141,7 +182,7 @@ export class OrdersService {
     const createAndSaveOrder = async (): Promise<OrderResponseDto> => {
       const orderId = this.ordersRepository.nextId();
       const now = new Date();
-      const items = createOrderDto.items.map((itemDto) => ({
+      const items = normalizedItems.map((itemDto) => ({
         id: this.ordersRepository.nextItemIdValue(),
         orderId,
         productId: itemDto.productId,
@@ -174,7 +215,7 @@ export class OrdersService {
     }
 
     return this.productsService.withStockReservation(
-      createOrderDto.items.map(({ productId, qty }) => ({ productId, qty })),
+      normalizedItems.map(({ productId, qty }) => ({ productId, qty })),
       createAndSaveOrder,
     );
   }
@@ -246,10 +287,7 @@ export class OrdersService {
       return this.ordersRepository.save(order);
     };
 
-    if (
-      nextStatus === OrderStatus.CANCELLED &&
-      this.productsService
-    ) {
+    if (nextStatus === OrderStatus.CANCELLED && this.productsService) {
       return toOrderResponse(
         await this.productsService.withStockRestoration(
           order.items.map(({ productId, qty }) => ({ productId, qty })),
@@ -265,7 +303,10 @@ export class OrdersService {
    * GET /orders/:id – chi tiết một đơn cho màn hình xác nhận.
    * Đơn của người khác được xử lý như không tồn tại (404) để không lộ thông tin.
    */
-  async findMyOrder(userId: string, orderId: number): Promise<OrderResponseDto> {
+  async findMyOrder(
+    userId: string,
+    orderId: number,
+  ): Promise<OrderResponseDto> {
     const order = await this.ordersRepository.findById(orderId);
     if (!order || order.userId !== userId) {
       throw new NotFoundException(`Không tìm thấy đơn hàng #${orderId}`);

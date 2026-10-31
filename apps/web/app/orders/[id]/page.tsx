@@ -7,10 +7,12 @@ import {
   fetchOrder,
   updateOrderStatus,
   fetchLoyaltyPoints,
+  payOrder,
   type ApiResult,
   type Order,
   type OrderStatus,
 } from '../../../lib/api';
+import { useCart } from '../../../lib/cart';
 import { describeItem, formatDateTime, formatVnd, STATUS_META } from '../../../lib/format';
 import { StatusBadge } from '../../../components/StatusBadge';
 import {
@@ -119,6 +121,7 @@ function HeadlineIcon({ icon }: { icon: Icon }) {
  * Hiển thị điểm loyalty, voucher và các bước chuyển trạng thái.
  */
 export default function OrderConfirmationPage() {
+  const { setCart } = useCart();
   const params = useParams<{ id: string }>();
   const id = params.id;
 
@@ -129,6 +132,36 @@ export default function OrderConfirmationPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Retry the order shown on this page, including after reload. Do not send
+  // the customer back to a checkout whose in-memory pendingOrder was lost.
+  const retryPayment = async () => {
+    if (isUpdating) return;
+    setIsUpdating(true);
+    setActionError(null);
+    const response = await payOrder(Number(id), 'WALLET', crypto.randomUUID());
+    setIsUpdating(false);
+    if (!response.ok) {
+      setActionError(response.message);
+      return;
+    }
+    if (response.data.status === 'PAID') {
+      setCart((current) => {
+        if (!result?.ok) return current;
+        const orderItems = result.data.items;
+        const sameCart = current.length === orderItems.length && current.every((item) =>
+          orderItems.some((line) =>
+            line.productId === (item.productId ?? item.id.split('-')[0]) &&
+            line.size === item.size.replace(/^Size\s+/, '') &&
+            line.qty === item.quantity &&
+            JSON.stringify([...line.toppings].sort()) === JSON.stringify([...item.toppings].sort()),
+          ),
+        );
+        return sameCart ? [] : current;
+      });
+      setReloadKey((value) => value + 1);
+    }
+  };
 
   // Tải đơn và điểm tích luỹ (lần đầu, khi đổi id, khi bấm thử lại)
   useEffect(() => {
@@ -311,9 +344,13 @@ export default function OrderConfirmationPage() {
         <Link href="/orders" className={buttonStyles.secondaryBtn}>
           Xem đơn của tôi
         </Link>
-        <Link href={failed ? '/?view=checkout' : '/'} className={buttonStyles.primaryBtn}>
-          {failed ? 'Thanh toán lại' : 'Đặt thêm món'}
-        </Link>
+        {failed ? (
+          <button type="button" disabled={isUpdating} onClick={retryPayment} className={buttonStyles.primaryBtn}>
+            {isUpdating ? 'Đang thanh toán…' : 'Thanh toán lại bằng ví'}
+          </button>
+        ) : (
+          <Link href="/" className={buttonStyles.primaryBtn}>Đặt thêm món</Link>
+        )}
       </div>
 
       {/* Bảng chuyển trạng thái đơn hàng */}

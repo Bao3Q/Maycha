@@ -120,7 +120,7 @@ describe('Nghiệp vụ backend nâng cao (BrewLite)', () => {
 
       expect(payment1.success).toBe(true);
       expect(payment1.status).toBe(OrderStatus.PAID);
-      expect(payment1.earnedLoyaltyPoints).toBe(3); // 39.000đ -> 3 điểm
+      expect(payment1.earnedLoyaltyPoints).toBe(4); // Size L: 49.000đ -> 4 điểm
 
       // Lần gửi 2: Cùng Idempotency-Key
       const payment2 = await paymentsService.processPayment('u1', {
@@ -135,7 +135,7 @@ describe('Nghiệp vụ backend nâng cao (BrewLite)', () => {
       expect(payment2.isIdempotent).toBe(true);
 
       // Điểm tích lũy không bị nhân đôi
-      expect(await paymentsService.getLoyaltyPoints('u1')).toBe(3);
+      expect(await paymentsService.getLoyaltyPoints('u1')).toBe(4);
     });
 
     it('từ chối dùng lại key cho một đơn hàng hoặc phương thức khác', async () => {
@@ -397,9 +397,9 @@ describe('Nghiệp vụ backend nâng cao (BrewLite)', () => {
         voucherCode: 'MAYCHA10',
       });
 
-      expect(order.subtotal).toBe(90000);
-      expect(order.discountAmount).toBe(9000); // 10% của 90.000đ
-      expect(order.total).toBe(81000);
+      expect(order.subtotal).toBe(100000);
+      expect(order.discountAmount).toBe(10000); // 10% của 100.000đ
+      expect(order.total).toBe(90000);
       expect(order.voucherCode).toBe('MAYCHA10');
     });
 
@@ -417,9 +417,9 @@ describe('Nghiệp vụ backend nâng cao (BrewLite)', () => {
         voucherCode: 'BREWLITE20',
       });
 
-      expect(order.subtotal).toBe(39000);
+      expect(order.subtotal).toBe(49000);
       expect(order.discountAmount).toBe(20000);
-      expect(order.total).toBe(19000);
+      expect(order.total).toBe(29000);
     });
 
     it('ném lỗi BadRequestException khi nhập mã giảm giá không hợp lệ', async () => {
@@ -463,8 +463,8 @@ describe('Nghiệp vụ backend nâng cao (BrewLite)', () => {
         method: 'VNPAY',
       });
 
-      expect(res.earnedLoyaltyPoints).toBe(9);
-      expect(await paymentsService.getLoyaltyPoints('u1')).toBe(9);
+      expect(res.earnedLoyaltyPoints).toBe(10);
+      expect(await paymentsService.getLoyaltyPoints('u1')).toBe(10);
     });
 
     it('tính điểm trên tổng tiền sau khi áp dụng voucher', async () => {
@@ -486,9 +486,9 @@ describe('Nghiệp vụ backend nâng cao (BrewLite)', () => {
         method: 'VNPAY',
       });
 
-      expect(order.total).toBe(19000);
-      expect(result.earnedLoyaltyPoints).toBe(1);
-      expect(await paymentsService.getLoyaltyPoints('u1')).toBe(1);
+      expect(order.total).toBe(29000);
+      expect(result.earnedLoyaltyPoints).toBe(2);
+      expect(await paymentsService.getLoyaltyPoints('u1')).toBe(2);
     });
   });
 });
