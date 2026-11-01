@@ -1,6 +1,6 @@
 'use client';
 
-import { type Dispatch, type SetStateAction, useSyncExternalStore } from 'react';
+import { createContext, createElement, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import type { CreateOrderItem } from './api';
 
 /**
@@ -51,10 +51,12 @@ export const toOrderItem = (item: CartItem): CreateOrderItem => ({
 });
 
 const cartStorageKey = 'maycha-cart';
-let cartSnapshot: CartItem[] = [];
-let cartStoreInitialized = false;
-const cartListeners = new Set<() => void>();
-const emptyCart: CartItem[] = [];
+type CartContextValue = {
+  cart: CartItem[];
+  setCart: Dispatch<SetStateAction<CartItem[]>>;
+};
+
+const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 const isCartItem = (value: unknown): value is CartItem => {
   if (typeof value !== 'object' || value === null) return false;
@@ -75,57 +77,52 @@ const isCartItem = (value: unknown): value is CartItem => {
   );
 };
 
-const initializeCartStore = () => {
-  if (cartStoreInitialized || typeof window === 'undefined') return;
+/** Một Provider giữ state chung cho header và tất cả trang con. */
+export function CartProvider({ children }: { children: ReactNode }) {
+  // Giỏ rỗng ở server và lần render đầu giúp Next.js hydrate nhất quán.
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
-  try {
-    const savedCart = window.localStorage.getItem(cartStorageKey);
-    if (savedCart) {
-      const parsedCart: unknown = JSON.parse(savedCart);
-      if (!Array.isArray(parsedCart)) {
-        throw new Error('Saved cart data has an invalid format');
+  useEffect(() => {
+    let restored: CartItem[] = [];
+    try {
+      const saved = window.localStorage.getItem(cartStorageKey);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+        if (!Array.isArray(parsed) || !parsed.every(isCartItem)) {
+          throw new Error('Saved cart contains invalid items');
+        }
+        restored = parsed;
       }
-      const validCart = parsedCart.filter(isCartItem);
-      if (validCart.length !== parsedCart.length) {
-        throw new Error('Saved cart contains invalid items');
-      }
-      cartSnapshot = validCart;
+    } catch (error) {
+      console.error('Không thể tải giỏ hàng đã lưu:', error);
     }
-  } catch (error) {
-    console.error('Không thể tải giỏ hàng đã lưu:', error);
-  } finally {
-    cartStoreInitialized = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- khôi phục state từ browser storage sau hydration
+    setCart(restored);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    // Không ghi [] đè giỏ cũ trước khi đọc localStorage xong.
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+    } catch (error) {
+      console.error('Không thể lưu giỏ hàng:', error);
+    }
+  }, [cart, hydrated]);
+
+  const value = useMemo(() => ({ cart, setCart }), [cart]);
+  return createElement(CartContext.Provider, { value }, children);
+}
+
+/** Component đọc và cập nhật cùng state qua React Context. */
+export function useCart(): CartContextValue {
+  const context = useContext(CartContext);
+  if (!context) {
+    throw new Error('useCart phải được sử dụng bên trong CartProvider');
   }
-};
-
-const subscribeToCart = (listener: () => void) => {
-  cartListeners.add(listener);
-  initializeCartStore();
-  listener();
-  return () => {
-    cartListeners.delete(listener);
-  };
-};
-
-const getCartSnapshot = () => cartSnapshot;
-const getServerCartSnapshot = () => emptyCart;
-
-export const setCart: Dispatch<SetStateAction<CartItem[]>> = (action) => {
-  initializeCartStore();
-  cartSnapshot = typeof action === 'function' ? action(cartSnapshot) : action;
-
-  try {
-    window.localStorage.setItem(cartStorageKey, JSON.stringify(cartSnapshot));
-  } catch (error) {
-    console.error('Không thể lưu giỏ hàng:', error);
-  }
-
-  cartListeners.forEach((listener) => listener());
-};
-
-export function useCart() {
-  const cart = useSyncExternalStore(subscribeToCart, getCartSnapshot, getServerCartSnapshot);
-  return { cart, setCart };
+  return context;
 }
 
 export const cartCount = (cart: CartItem[]) =>

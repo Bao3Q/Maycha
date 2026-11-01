@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
+import { CartProvider } from "../lib/cart";
 
 const vietnameseSans = Be_Vietnam_Pro({
   variable: "--font-vietnamese-sans",
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="vi"
       className={`${vietnameseSans.variable} ${display.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col bg-sage text-ink">{children}</body>
+      <body className="flex min-h-full flex-col bg-sage text-ink">
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   );
 }
