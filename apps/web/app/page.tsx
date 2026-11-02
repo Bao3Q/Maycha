@@ -57,11 +57,6 @@ const paymentMethods: { label: string; hint: string; method: PaymentMethod; icon
   { label: "SePay QR", hint: "Quét mã và chuyển khoản ngân hàng", method: "SEPAY", icon: "wallet" },
 ];
 
-const newIdempotencyKey = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
 const parseProducts = (data: unknown): Product[] => {
   if (!Array.isArray(data)) throw new Error("Invalid products response");
   return data.map((value: unknown) => {
@@ -277,7 +272,7 @@ function HomePageContent() {
     }
 
     const mockMethod = simulateFailure || payment === "SEPAY" ? "FAIL" : payment;
-    const paid = await payOrder(orderId, mockMethod, newIdempotencyKey());
+    const paid = await payOrder(orderId, mockMethod);
     if (!paid.ok) return failPayment(paid);
 
     // Thành công → xóa giỏ. Thất bại (PAYMENT_FAILED) → giữ nguyên giỏ để

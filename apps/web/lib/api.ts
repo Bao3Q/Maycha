@@ -263,11 +263,17 @@ export interface PaymentResponse {
 export function payOrder(
   orderId: number,
   method: MockPaymentMethod,
-  idempotencyKey: string,
+  idempotencyKey = `payment:${orderId}:${method}`,
 ): Promise<ApiResult<PaymentResponse>> {
   return request<PaymentResponse>(
     '/payments',
-    jsonBody({ orderId, method, idempotencyKey }),
+    {
+      ...jsonBody({ orderId, method }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+    },
   );
 }
 

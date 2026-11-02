@@ -124,7 +124,8 @@ export class OrdersService {
         items: normalizedItems,
       });
       const createdOrderId = await this.prisma.$transaction(async (tx) => {
-        for (const [productId, qty] of quantities) {
+        // Consistent lock order avoids deadlocks for carts with reversed items.
+        for (const [productId, qty] of [...quantities].sort(([a], [b]) => a.localeCompare(b))) {
           const product = await tx.product.findUnique({
             where: { id: productId },
           });
@@ -139,8 +140,8 @@ export class OrdersService {
             );
           }
           const updated = await tx.product.updateMany({
-            where: { id: productId, stock: { gte: qty } },
-            data: { stock: { decrement: qty } },
+            where: { id: productId, version: product.version, stock: { gte: qty } },
+            data: { stock: { decrement: qty }, version: { increment: 1 } },
           });
           if (updated.count !== 1) {
             throw new ConflictException(
@@ -256,10 +257,10 @@ export class OrdersService {
               (quantities.get(item.productId) ?? 0) + item.qty,
             );
           }
-          for (const [productId, qty] of quantities) {
+          for (const [productId, qty] of [...quantities].sort(([a], [b]) => a.localeCompare(b))) {
             await tx.product.update({
               where: { id: productId },
-              data: { stock: { increment: qty } },
+              data: { stock: { increment: qty }, version: { increment: 1 } },
             });
           }
         }
@@ -281,10 +282,11 @@ export class OrdersService {
       return toOrderResponse(updated);
     }
 
+    const expectedStatus = order.status;
     const saveStatus = async (): Promise<Order> => {
       order.status = nextStatus;
       order.updatedAt = new Date();
-      return this.ordersRepository.save(order);
+      return this.ordersRepository.saveStatus(order, expectedStatus);
     };
 
     if (nextStatus === OrderStatus.CANCELLED && this.productsService) {

@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Body,
+  BadRequestException,
   Headers,
   UseGuards,
 } from '@nestjs/common';
@@ -31,7 +32,10 @@ export class PaymentsController {
   ) {
     // Ưu tiên key từ header nếu có, nếu không thì dùng key từ body
     const idempotencyKey =
-      headerKey || xHeaderKey || createPaymentDto.idempotencyKey;
+      headerKey ?? xHeaderKey ?? createPaymentDto.idempotencyKey;
+    if (!idempotencyKey?.trim()) {
+      throw new BadRequestException('Cần gửi Idempotency-Key khi thanh toán');
+    }
     return this.paymentsService.processPayment(user.id, {
       orderId: createPaymentDto.orderId,
       method: createPaymentDto.method,

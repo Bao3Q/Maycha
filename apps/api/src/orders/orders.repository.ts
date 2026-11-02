@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import {
   Order,
   OrderItem,
@@ -25,6 +25,13 @@ export class OrdersRepository {
   /** Cấp id cho dòng sản phẩm trong đơn. */
   nextItemIdValue(): number {
     return this.nextItemId++;
+  }
+
+  async saveStatus(order: Order, expectedStatus: OrderStatus): Promise<Order> {
+    if (!this.prisma && this.orders.get(order.id)?.status !== expectedStatus) {
+      throw new ConflictException('Trạng thái đơn hàng vừa được thay đổi, vui lòng thử lại');
+    }
+    return this.save(order);
   }
 
   async save(order: Order): Promise<Order> {

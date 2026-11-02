@@ -1,6 +1,8 @@
 'use client';
 
-import { createContext, createElement, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { createContext, createElement, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { createStore } from 'zustand/vanilla';
+import { useStore } from 'zustand';
 import type { CreateOrderItem } from './api';
 
 /**
@@ -51,12 +53,19 @@ export const toOrderItem = (item: CartItem): CreateOrderItem => ({
 });
 
 const cartStorageKey = 'maycha-cart';
-type CartContextValue = {
+type CartState = {
   cart: CartItem[];
   setCart: Dispatch<SetStateAction<CartItem[]>>;
 };
 
-const CartContext = createContext<CartContextValue | undefined>(undefined);
+/** Zustand owns the state; Context only passes a store scoped to this layout. */
+const createCartStore = () => createStore<CartState>()((set) => ({
+  cart: [],
+  setCart: (next) => set((state) => ({
+    cart: typeof next === 'function' ? next(state.cart) : next,
+  })),
+}));
+const CartContext = createContext<ReturnType<typeof createCartStore> | undefined>(undefined);
 
 const isCartItem = (value: unknown): value is CartItem => {
   if (typeof value !== 'object' || value === null) return false;
@@ -77,11 +86,10 @@ const isCartItem = (value: unknown): value is CartItem => {
   );
 };
 
-/** Một Provider giữ state chung cho header và tất cả trang con. */
+/** One Zustand store per layout; do not share server state across requests. */
 export function CartProvider({ children }: { children: ReactNode }) {
   // Giỏ rỗng ở server và lần render đầu giúp Next.js hydrate nhất quán.
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+  const [store] = useState(createCartStore);
 
   useEffect(() => {
     let restored: CartItem[] = [];
@@ -97,32 +105,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Không thể tải giỏ hàng đã lưu:', error);
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- khôi phục state từ browser storage sau hydration
-    setCart(restored);
-    setHydrated(true);
-  }, []);
+    store.getState().setCart(restored);
+    // Subscribe after restoring, so the initial [] cannot overwrite saved items.
+    // Keep the existing storage format to preserve carts from the Context version.
+    return store.subscribe(({ cart }) => {
+      try {
+        window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+      } catch (error) {
+        console.error('Không thể lưu giỏ hàng:', error);
+      }
+    });
+  }, [store]);
 
-  useEffect(() => {
-    // Không ghi [] đè giỏ cũ trước khi đọc localStorage xong.
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(cartStorageKey, JSON.stringify(cart));
-    } catch (error) {
-      console.error('Không thể lưu giỏ hàng:', error);
-    }
-  }, [cart, hydrated]);
-
-  const value = useMemo(() => ({ cart, setCart }), [cart]);
-  return createElement(CartContext.Provider, { value }, children);
+  return createElement(CartContext.Provider, { value: store }, children);
 }
 
-/** Component đọc và cập nhật cùng state qua React Context. */
-export function useCart(): CartContextValue {
+/** Read Zustand state and re-render when the shared cart changes. */
+export function useCart(): CartState {
   const context = useContext(CartContext);
   if (!context) {
     throw new Error('useCart phải được sử dụng bên trong CartProvider');
   }
-  return context;
+  return useStore(context);
 }
 
 export const cartCount = (cart: CartItem[]) =>

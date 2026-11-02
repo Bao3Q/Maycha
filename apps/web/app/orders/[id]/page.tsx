@@ -139,7 +139,7 @@ export default function OrderConfirmationPage() {
     if (isUpdating) return;
     setIsUpdating(true);
     setActionError(null);
-    const response = await payOrder(Number(id), 'WALLET', crypto.randomUUID());
+    const response = await payOrder(Number(id), 'WALLET');
     setIsUpdating(false);
     if (!response.ok) {
       setActionError(response.message);

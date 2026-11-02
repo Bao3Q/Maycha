@@ -39,6 +39,7 @@ const ACCEPTED_PAYMENT_METHODS = new Set([
 export class PaymentsService {
   private readonly idempotencyStore = new Map<string, IdempotencyRecord>();
   private readonly loyaltyPointsStore = new Map<string, number>();
+  private readonly paymentQueues = new Map<string, Promise<void>>();
 
   constructor(
     private readonly ordersRepository: OrdersRepository,
@@ -57,6 +58,30 @@ export class PaymentsService {
   }
 
   async processPayment(
+    userId: string,
+    createPaymentDto: CreatePaymentDto,
+  ): Promise<PaymentResult> {
+    // Database transactions protect production. The in-memory adapter also
+    // needs serialization: two calls can read PENDING before either saves.
+    if (this.prisma) return this.processPaymentOnce(userId, createPaymentDto);
+    const previous = this.paymentQueues.get(userId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.paymentQueues.set(userId, current);
+    await previous;
+    try {
+      return await this.processPaymentOnce(userId, createPaymentDto);
+    } finally {
+      release();
+      if (this.paymentQueues.get(userId) === current) {
+        this.paymentQueues.delete(userId);
+      }
+    }
+  }
+
+  private async processPaymentOnce(
     userId: string,
     createPaymentDto: CreatePaymentDto,
   ): Promise<PaymentResult> {

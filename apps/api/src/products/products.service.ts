@@ -25,6 +25,7 @@ export interface StockRequest {
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
+  private stockQueue: Promise<void> = Promise.resolve();
   private products: ProductItem[] = [
     {
       id: '1',
@@ -143,6 +144,23 @@ export class ProductsService implements OnModuleInit {
     operationType: 'reserve' | 'restore',
     operation: () => Promise<T>,
   ): Promise<T> {
+    // Keep uncommitted restorations invisible to other in-memory operations.
+    const previous = this.stockQueue;
+    let release!: () => void;
+    this.stockQueue = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await this.applyStockTransaction(requests, operationType, operation);
+    } finally {
+      release();
+    }
+  }
+
+  private async applyStockTransaction<T>(
+    requests: StockRequest[],
+    operationType: 'reserve' | 'restore',
+    operation: () => Promise<T>,
+  ): Promise<T> {
     const quantities = new Map<string, number>();
     for (const { productId, qty } of requests) {
       if (!productId || !Number.isSafeInteger(qty) || qty <= 0) {
@@ -156,7 +174,6 @@ export class ProductsService implements OnModuleInit {
       quantities.set(productId, totalQty);
     }
 
-    const snapshots = new Map<string, { stock: number }>();
     for (const [productId, qty] of quantities) {
       const product = this.products.find((item) => item.id === productId);
       if (!product) {
@@ -175,7 +192,6 @@ export class ProductsService implements OnModuleInit {
       ) {
         throw new BadRequestException('Số lượng tồn kho sau khi hoàn không hợp lệ');
       }
-      snapshots.set(productId, { stock: product.stock });
     }
 
     const changedProductIds: string[] = [];
@@ -193,9 +209,10 @@ export class ProductsService implements OnModuleInit {
     } catch (error) {
       for (const productId of changedProductIds) {
         const product = this.products.find((item) => item.id === productId);
-        const snapshot = snapshots.get(productId)!;
         if (product) {
-          product.stock = snapshot.stock;
+          // Undo only the quantity changed by this transaction.
+          const qty = quantities.get(productId)!;
+          product.stock += operationType === 'reserve' ? qty : -qty;
         }
       }
       throw error;
