@@ -5,8 +5,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
  * Cấu hình dùng chung cho main.ts và test e2e.
  */
 export function setupApp(app: INestApplication): void {
-  // Tiền tố chung cho tất cả API
-  app.setGlobalPrefix('api');
+  // Kiểm tra dữ liệu DTO toàn cục
+  app.useGlobalPipes
 
   // Kiểm tra dữ liệu DTO toàn cục
   app.useGlobalPipes(
