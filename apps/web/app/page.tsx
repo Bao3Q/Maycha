@@ -264,7 +264,7 @@ function HomePageContent() {
     }
 
     if (payment === "SEPAY" && !simulateFailure) {
-      const checkout = await createSePayCheckout(orderId);
+      const checkout = await createSePayCheckout(orderId, true);
       if (!checkout.ok) return failPayment(checkout);
       setPaying(false);
       router.push(`/payments/sepay/${orderId}`);
