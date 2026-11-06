@@ -2,4 +2,7 @@ node_modules/
 apps/api/generated/prisma/
 apps/web/.open-next/
 apps/web/.wrangler/
+apps/web/package-lock.json
 .codegraph/
+.env
+.env.local
