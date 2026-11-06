@@ -106,7 +106,6 @@ export default function SePayPaymentPage() {
   useEffect(() => {
     if (!checkout || checkout.status !== "PENDING" || expired) return;
     if (order?.status === "PAID") return;
-    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [checkout, expired, order?.status]);
