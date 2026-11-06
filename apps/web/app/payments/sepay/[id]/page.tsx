@@ -15,7 +15,13 @@ import { useCart } from "../../../../lib/cart";
 import { formatVnd } from "../../../../lib/format";
 
 const POLL_INTERVAL_MS = 5000;
-const MAX_POLLS = 120;
+const MAX_POLLS = 12;
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 export default function SePayPaymentPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +31,8 @@ export default function SePayPaymentPage() {
   const [error, setError] = useState<string | null>(null);
   const [polls, setPolls] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
+  const [expired, setExpired] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const orderId = Number(id);
   const validOrderId = Number.isSafeInteger(orderId) && orderId > 0;
 
@@ -45,13 +53,15 @@ export default function SePayPaymentPage() {
         return;
       }
 
-      const checkoutResult = await createSePayCheckout(orderId);
+      // Lần thử lại sẽ mở phiên SePay mới sau khi phiên cũ hết hạn.
+      const checkoutResult = await createSePayCheckout(orderId, retryKey > 0);
       if (cancelled) return;
       if (!checkoutResult.ok) {
         setError(checkoutResult.message);
         return;
       }
       setCheckout(checkoutResult.data);
+      setExpired(checkoutResult.data.status === "EXPIRED");
       setError(null);
     };
 
@@ -64,6 +74,7 @@ export default function SePayPaymentPage() {
   useEffect(() => {
     if (
       !checkout ||
+      expired ||
       !order ||
       (order.status !== "PENDING" && order.status !== "PAYMENT_FAILED") ||
       polls >= MAX_POLLS
@@ -83,11 +94,62 @@ export default function SePayPaymentPage() {
       });
     }, POLL_INTERVAL_MS);
     return () => window.clearTimeout(timer);
-  }, [checkout, id, order, polls, setCart]);
+  }, [checkout, expired, id, order, polls, setCart]);
+
+  const expiresAt = checkout ? Date.parse(checkout.expiresAt) : null;
+  const remainingSeconds =
+    expiresAt !== null && Number.isFinite(expiresAt)
+      ? Math.max(0, Math.ceil((expiresAt - now) / 1000))
+      : null;
+
+  // Đếm ngược thời gian còn lại của phiên thanh toán.
+  useEffect(() => {
+    if (!checkout || checkout.status !== "PENDING" || expired) return;
+    if (order?.status === "PAID") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [checkout, expired, order?.status]);
+
+  // Hết 1 phút: hỏi lại đơn hàng, nếu chưa thanh toán thì chuyển sang thanh toán lỗi.
+  useEffect(() => {
+    if (!checkout || checkout.status !== "PENDING" || expired) return;
+    if (order?.status === "PAID") return;
+    if (remainingSeconds === null || remainingSeconds > 0) return;
+
+    let cancelled = false;
+    const expire = async () => {
+      const orderResult = await fetchOrder(id);
+      if (cancelled) return;
+      if (orderResult.ok) {
+        setOrder(orderResult.data);
+        if (orderResult.data.status === "PAID") {
+          setCart([]);
+          return;
+        }
+      }
+
+      const checkoutResult = await createSePayCheckout(orderId);
+      if (cancelled) return;
+      if (checkoutResult.ok) {
+        setCheckout(checkoutResult.data);
+        setExpired(checkoutResult.data.status === "EXPIRED");
+      } else {
+        setError(checkoutResult.message);
+      }
+    };
+
+    void expire();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkout, expired, id, order?.status, orderId, remainingSeconds, setCart]);
 
   const retry = () => {
     setError(null);
+    setExpired(false);
+    setCheckout(null);
     setPolls(0);
+    setNow(Date.now());
     setRetryKey((key) => key + 1);
   };
 
@@ -121,6 +183,21 @@ export default function SePayPaymentPage() {
               Xem đơn hàng
             </Link>
           </section>
+        ) : expired ? (
+          <section className="mt-8 rounded-3xl border border-line bg-paper p-6 sm:p-8">
+            <p className="text-xl font-semibold text-danger">Thanh toán thất bại</p>
+            <p className="mt-2 text-muted">
+              Phiên thanh toán SePay của đơn hàng #{id} đã hết hạn sau 1 phút.
+              Vui lòng thanh toán lại để nhận mã QR mới.
+            </p>
+            <button
+              type="button"
+              onClick={retry}
+              className="mt-6 rounded-xl bg-leaf px-5 py-3 font-semibold text-white hover:bg-leaf-deep"
+            >
+              Thanh toán lại
+            </button>
+          </section>
         ) : checkout ? (
           <section className="mt-8 grid gap-6 rounded-3xl border border-line bg-paper p-6 sm:grid-cols-[1fr_320px] sm:p-8">
             <div>
@@ -150,6 +227,16 @@ export default function SePayPaymentPage() {
                 Quét mã QR và giữ nguyên số tiền cùng nội dung chuyển khoản. Trang
                 sẽ tự cập nhật khi SePay gửi xác nhận.
               </p>
+              {remainingSeconds !== null && (
+                <p
+                  role="timer"
+                  className={`mt-4 text-sm font-semibold ${
+                    remainingSeconds <= 10 ? "text-danger" : "text-muted"
+                  }`}
+                >
+                  Mã QR hết hạn sau {formatCountdown(remainingSeconds)}
+                </p>
+              )}
               {polls >= MAX_POLLS && (
                 <button
                   type="button"

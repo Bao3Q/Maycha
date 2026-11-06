@@ -26,18 +26,24 @@ interface SePayConfig {
   accountName: string;
 }
 
+/** Thời gian sống của một phiên thanh toán SePay (1 phút). */
+export const SEPAY_PAYMENT_TTL_MS = 60_000;
+
+export type SePayCheckoutStatus = 'PENDING' | 'EXPIRED';
+
 @Injectable()
 export class SepayService {
   constructor(
     @Optional() @Inject(PrismaService) private readonly prisma?: PrismaService | null,
   ) {}
 
-  async createCheckout(userId: string, orderId: number) {
+  async createCheckout(userId: string, orderId: number, restart = false) {
     const config = this.getConfig();
     const prisma = this.requireDatabase();
     const idempotencyKey = this.intentKey(orderId);
+    const now = Date.now();
 
-    const payment = await prisma.$transaction(async (tx) => {
+    const { payment, expired } = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id: orderId } });
       if (!order || order.userId !== userId) {
         throw new NotFoundException(`Không tìm thấy đơn hàng #${orderId}`);
@@ -64,30 +70,63 @@ export class SepayService {
           'Số tiền đơn hàng đã thay đổi; vui lòng tạo đơn mới',
         );
       }
-      if (existing) return existing;
-
-      return tx.payment.create({
-        data: {
-          userId,
-          orderId,
-          idempotencyKey,
-          amount: order.total,
-          method: 'SEPAY',
-          success: false,
-          requestFingerprint: JSON.stringify({
+      if (!existing) {
+        const created = await tx.payment.create({
+          data: {
+            userId,
             orderId,
+            idempotencyKey,
             amount: order.total,
             method: 'SEPAY',
-          }),
-          result: {
             success: false,
-            orderId,
-            status: order.status,
-            message: 'Đang chờ SePay xác nhận thanh toán',
-            transferDescription: this.transferDescription(orderId),
+            requestFingerprint: JSON.stringify({
+              orderId,
+              amount: order.total,
+              method: 'SEPAY',
+            }),
+            result: this.pendingResult(orderId, order.status as OrderStatus),
           },
+        });
+        return { payment: created, expired: false };
+      }
+
+      if (!this.isSessionExpired(existing.createdAt, now)) {
+        return { payment: existing, expired: false };
+      }
+
+      // Phiên đã quá 1 phút. Lần kiểm tra đầu tiên đánh dấu đơn thanh toán lỗi;
+      // khi khách bấm "Thanh toán lại" (restart) mới mở phiên mới.
+      if (!restart) {
+        if (order.status === OrderStatus.PENDING) {
+          await tx.order.updateMany({
+            where: { id: orderId, status: OrderStatus.PENDING },
+            data: { status: OrderStatus.PAYMENT_FAILED },
+          });
+        }
+        const expiredPayment = await tx.payment.update({
+          where: { id: existing.id },
+          data: {
+            result: {
+              success: false,
+              orderId,
+              status: OrderStatus.PAYMENT_FAILED,
+              message: 'Phiên thanh toán SePay đã hết hạn',
+              expiredAt: new Date(now).toISOString(),
+              transferDescription: this.transferDescription(orderId),
+            },
+          },
+        });
+        return { payment: expiredPayment, expired: true };
+      }
+
+      const renewed = await tx.payment.update({
+        where: { id: existing.id },
+        data: {
+          createdAt: new Date(now),
+          result: this.pendingResult(orderId, OrderStatus.PENDING),
         },
       });
+      return { payment: renewed, expired: false };
     });
 
     const transferDescription = this.transferDescription(orderId);
@@ -107,7 +146,10 @@ export class SepayService {
       accountNumber: config.accountNumber,
       accountName: config.accountName,
       qrUrl: qr.toString(),
-      status: 'PENDING',
+      status: expired ? ('EXPIRED' as const) : ('PENDING' as const),
+      expiresAt: new Date(
+        payment.createdAt.getTime() + SEPAY_PAYMENT_TTL_MS,
+      ).toISOString(),
     };
   }
 
@@ -167,6 +209,11 @@ export class SepayService {
         }
         throw new ConflictException(
           'Đơn hàng đã được thanh toán bằng một giao dịch SePay khác',
+        );
+      }
+      if (this.isSessionExpired(payment.createdAt)) {
+        throw new ConflictException(
+          'Phiên thanh toán SePay đã hết hạn; vui lòng tạo lại mã QR',
         );
       }
 
@@ -280,6 +327,24 @@ export class SepayService {
       return {};
     }
     return value as Prisma.JsonObject;
+  }
+
+  /** Trạng thái một phiên SePay còn hiệu lực trong 1 phút kể từ lúc tạo. */
+  private isSessionExpired(createdAt: Date, now = Date.now()): boolean {
+    return now - createdAt.getTime() >= SEPAY_PAYMENT_TTL_MS;
+  }
+
+  private pendingResult(
+    orderId: number,
+    status: OrderStatus,
+  ): Prisma.InputJsonObject {
+    return {
+      success: false,
+      orderId,
+      status,
+      message: 'Đang chờ SePay xác nhận thanh toán',
+      transferDescription: this.transferDescription(orderId),
+    };
   }
 
   private intentKey(orderId: number): string {

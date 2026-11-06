@@ -1,8 +1,8 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
 import { OrderStatus } from '../orders/entities/order.entity';
-import { SepayService } from './sepay.service';
+import { SEPAY_PAYMENT_TTL_MS, SepayService } from './sepay.service';
 
 describe('SepayService', () => {
   const originalEnv = {
@@ -52,6 +52,7 @@ describe('SepayService', () => {
       amount: 120000,
       method: 'SEPAY',
       success: false,
+      createdAt: new Date(),
       result: { success: false, orderId: 17, status: OrderStatus.PENDING },
     };
     const transaction = {
@@ -68,10 +69,21 @@ describe('SepayService', () => {
         findUnique: jest.fn(async () => payment),
         update: jest.fn(
           async (args: {
-            data: { success: boolean; result: Prisma.InputJsonValue };
+            data: {
+              success?: boolean;
+              result?: Prisma.InputJsonValue;
+              createdAt?: Date;
+            };
           }) => {
-            payment.success = args.data.success;
-            payment.result = args.data.result as typeof payment.result;
+            if (args.data.success !== undefined) {
+              payment.success = args.data.success;
+            }
+            if (args.data.result !== undefined) {
+              payment.result = args.data.result as typeof payment.result;
+            }
+            if (args.data.createdAt) {
+              payment.createdAt = args.data.createdAt;
+            }
             return payment;
           },
         ),
@@ -142,5 +154,40 @@ describe('SepayService', () => {
       service.handleWebhook({ ...event, content: 'MAYCHA17' }),
     ).resolves.toEqual({ accepted: true });
     expect(transaction.order.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('expires a SePay session after one minute and marks the order failed', async () => {
+    const { service, transaction, order, payment } = createService();
+    payment.createdAt = new Date(Date.now() - SEPAY_PAYMENT_TTL_MS - 1_000);
+
+    const checkout = await service.createCheckout('user-1', 17);
+
+    expect(checkout.status).toBe('EXPIRED');
+    expect(order.status).toBe(OrderStatus.PAYMENT_FAILED);
+    expect(transaction.order.updateMany).toHaveBeenCalledTimes(1);
+    expect(payment.result.status).toBe(OrderStatus.PAYMENT_FAILED);
+  });
+
+  it('rejects a webhook that arrives after the session expired', async () => {
+    const { service, transaction, payment } = createService();
+    payment.createdAt = new Date(Date.now() - SEPAY_PAYMENT_TTL_MS - 1_000);
+
+    await expect(service.handleWebhook(event)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(transaction.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('renews an expired session when the customer retries', async () => {
+    const { service, order, payment } = createService();
+    payment.createdAt = new Date(Date.now() - SEPAY_PAYMENT_TTL_MS - 1_000);
+
+    const checkout = await service.createCheckout('user-1', 17, true);
+
+    expect(checkout.status).toBe('PENDING');
+    expect(order.status).toBe(OrderStatus.PENDING);
+    expect(payment.createdAt.getTime()).toBeGreaterThan(
+      Date.now() - SEPAY_PAYMENT_TTL_MS,
+    );
   });
 });

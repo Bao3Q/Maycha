@@ -285,15 +285,18 @@ export interface SePayCheckoutResponse {
   accountNumber: string;
   accountName: string;
   qrUrl: string;
-  status: 'PENDING';
+  status: 'PENDING' | 'EXPIRED';
+  /** Thời điểm mã QR hết hạn (ISO 8601). */
+  expiresAt: string;
 }
 
 /** POST /payments/sepay/checkout – tạo QR thanh toán và phiên chờ webhook. */
 export function createSePayCheckout(
   orderId: number,
+  restart = false,
 ): Promise<ApiResult<SePayCheckoutResponse>> {
   return request<SePayCheckoutResponse>(
     '/payments/sepay/checkout',
-    jsonBody({ orderId }),
+    jsonBody({ orderId, restart }),
   );
 }

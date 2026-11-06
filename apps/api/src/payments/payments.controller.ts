@@ -48,7 +48,11 @@ export class PaymentsController {
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateSePayCheckoutDto,
   ) {
-    return this.sepayService.createCheckout(user.id, dto.orderId);
+    return this.sepayService.createCheckout(
+      user.id,
+      dto.orderId,
+      dto.restart ?? false,
+    );
   }
 
   /** Xem điểm thưởng tích lũy của tài khoản. */
